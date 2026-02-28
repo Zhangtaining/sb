@@ -2,12 +2,15 @@
 members = [
     "shared",
     "services/ingestion",
-    "services/perception",
     "services/reid",
     "services/exercise",
     "services/guidance",
     "services/api",
     "services/worker",
+    # perception is excluded from local workspace — it requires CUDA torch
+    # and is only built/run via Docker. Manage it separately:
+    #   cd services/perception && uv sync
+    # "services/perception",
 ]
 
 [tool.uv]

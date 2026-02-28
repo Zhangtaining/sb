@@ -17,3 +17,6 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/api"]
+
+[tool.uv.sources]
+gym-shared = { workspace = true }

@@ -15,3 +15,6 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/reid"]
+
+[tool.uv.sources]
+gym-shared = { workspace = true }
