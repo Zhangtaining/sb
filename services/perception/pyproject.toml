@@ -6,12 +6,16 @@ requires-python = ">=3.11"
 dependencies = [
     "gym-shared",
     "ultralytics>=8.3",
-    "torchreid>=0.2.1",
-    "torch>=2.3",
-    "torchvision>=0.18",
+    # torch<2.3 is the last release with macOS x86_64 CPU wheels.
+    # In production Docker (CUDA), remove the upper bound.
+    "torch>=2.1,<2.3",
+    "torchvision>=0.16,<0.18",
     "opencv-python-headless>=4.10",
-    "numpy>=1.26",
+    "numpy>=1.26,<2.0",  # torch 2.2.x was compiled against numpy 1.x
     "Pillow>=10.0",
+    "lap>=0.5.12",  # required by ByteTrack (ultralytics dependency)
+    # torchreid is GPU-only and hard to install locally.
+    # OSNet ReID is stubbed for Phase 1; real extractor added in Phase 2.
 ]
 
 [build-system]

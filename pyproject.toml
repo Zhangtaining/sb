@@ -7,10 +7,7 @@ members = [
     "services/guidance",
     "services/api",
     "services/worker",
-    # perception is excluded from local workspace — it requires CUDA torch
-    # and is only built/run via Docker. Manage it separately:
-    #   cd services/perception && uv sync
-    # "services/perception",
+    "services/perception",  # torch<2.3 pinned for macOS x86_64 CPU compat
 ]
 
 [tool.uv]
