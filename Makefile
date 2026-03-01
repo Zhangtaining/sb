@@ -20,6 +20,14 @@ dev-up: .env
 dev-up-cv: dev-up
 	docker compose --profile cv up -d
 
+## Start all services locally with native Mac GPU (faster than Docker for dev)
+dev-start: dev-up
+	@bash scripts/start_services.sh
+
+## Stop all locally running services
+dev-stop:
+	@bash scripts/stop_services.sh
+
 ## Stop all services
 dev-down:
 	docker compose --profile cv down
