@@ -220,4 +220,25 @@
 
 **Commit:** <!-- filled after commit -->
 
+## 2026-03-01 - LLM Multi-Provider Abstraction
+
+**Summary:** Refactored the guidance service LLM client into a pluggable provider pattern. Switching between Anthropic Claude and Google Gemini now requires only a single env-var change (`LLM_PROVIDER=anthropic|gemini`). All caller code (`form_alert_handler.py`) is unchanged.
+
+**Changes:**
+- `services/guidance/src/guidance/providers/base.py` — `BaseLLMProvider` ABC: `generate()` + `model_name`
+- `services/guidance/src/guidance/providers/anthropic.py` — `AnthropicProvider` wrapping `AsyncAnthropic`
+- `services/guidance/src/guidance/providers/gemini.py` — `GeminiProvider` wrapping `google-genai` async client
+- `services/guidance/src/guidance/providers/__init__.py` — `create_llm_provider()` factory
+- `services/guidance/src/guidance/llm_client.py` — `GymLLMClient` is now a thin facade; delegates all calls to the provider
+- `services/guidance/src/guidance/config.py` — added `llm_provider` + `gemini_api_key` fields
+- `services/guidance/src/guidance/main.py` — updated construction; logs active provider
+- `shared/src/gym_shared/settings.py` — added `llm_provider` + `gemini_api_key` settings fields
+- `services/guidance/pyproject.toml` — added `google-genai>=1.0`
+
+**Decisions Made:** Lazy imports in the factory (`from guidance.providers.anthropic import ...` inside the `if` branch) means the Anthropic SDK is only loaded when that provider is selected, and Gemini SDK only when Gemini is selected. This avoids import errors when only one SDK's key is present.
+
+**Context for Next Session:** T29–T33 (API service — FastAPI app, session/track endpoints, WebSocket live stream) are next. To switch to Gemini: set `LLM_PROVIDER=gemini`, `GEMINI_API_KEY=<key>`, and change `LLM_MODEL=gemini-2.0-flash` in `.env`.
+
+**Commit:** 61ed2cf
+
 <!-- Entries will be added here as tasks are completed -->
