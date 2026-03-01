@@ -130,6 +130,6 @@
 
 **Context for Next Session:** All T07–T09 complete. Next tasks: T10 (register_camera CLI script), T11 (setup_db script), then T12+ (perception service). T10 and T11 are independent of each other and can both start immediately.
 
-**Commit:** <!-- filled after commit -->
+**Commit:** 30fee6a
 
 <!-- Entries will be added here as tasks are completed -->
