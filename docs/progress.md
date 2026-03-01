@@ -179,4 +179,45 @@
 
 **Commit:** ee2b7f5
 
+## 2026-02-28 - T17–T24: Exercise Service
+
+**Summary:** Full exercise analysis service implemented. YAML-driven exercise definitions for squat, push-up, bicep curl, lateral raise. Heuristic classifier identifies exercise from joint angle variance. State-machine rep counter with median filtering and phase-lock debounce. Form analyzer fires alerts after 3+ consecutive frames out of range, with 10s cooldown. Pipeline consumes PerceptionEvents, persists ExerciseSet/RepEvent rows to TimescaleDB, and publishes RepCountedEvent/FormAlertEvent to Redis Streams. 15/15 unit tests passing.
+
+**Changes:**
+- `services/exercise/Dockerfile` — Python 3.11 slim
+- `services/exercise/src/exercise/config.py` — ExerciseConfig + build_config()
+- `services/exercise/data/exercises.yaml` — 4 exercises, 2-3 form checks each
+- `services/exercise/src/exercise/exercise_registry.py` — ExerciseRegistry loads YAML into typed dataclasses
+- `services/exercise/src/exercise/keypoint_utils.py` — compute_angle(), smooth_signal(), get_joint_angle()
+- `services/exercise/src/exercise/rep_counter.py` — per-track state machine (UP/DOWN/UNKNOWN)
+- `services/exercise/src/exercise/form_analyzer.py` — FormAnalyzer with debounce + cooldown
+- `services/exercise/src/exercise/classifier.py` — HeuristicClassifier using joint angle variance
+- `services/exercise/src/exercise/pipeline.py` — ExercisePipeline async consumer
+- `services/exercise/src/exercise/main.py` — service entry point
+- `services/exercise/tests/test_exercise.py` — 15 unit tests
+
+**Decisions Made:** Rep counted on DOWN→UP transition (not UP→DOWN) to match natural exercise phases. Median filter needs extra frames per phase — test updated to prime with 6 UP frames before starting cycles. Heuristic classifier uses variance over 30-frame rolling window; push-up vs bicep_curl disambiguated via lower-body activity.
+
+**Context for Next Session:** T17–T28 all COMPLETE. Next tasks: T29–T33 (API service — FastAPI app, session endpoints, WebSocket live stream, track history, video replay). T29 is the next logical step.
+
+**Commit:** <!-- filled after commit -->
+
+---
+
+## 2026-02-28 - T25–T28: Guidance Service
+
+**Summary:** LLM guidance service implemented. AsyncAnthropic wrapper returns None on errors (never crashes). Form alert handler consumes form_alerts stream, rate-limits at 30s per track, builds a concise system prompt, calls claude-sonnet-4-6, and dispatches the response. NotificationDispatcher publishes GuidanceMessage to the guidance stream and persists to notifications table. API key warning logged if ANTHROPIC_API_KEY not set.
+
+**Changes:**
+- `services/guidance/Dockerfile`
+- `services/guidance/src/guidance/config.py`
+- `services/guidance/src/guidance/llm_client.py` — GymLLMClient wrapping AsyncAnthropic
+- `services/guidance/src/guidance/notification_dispatcher.py` — publishes to guidance stream + persists to DB
+- `services/guidance/src/guidance/form_alert_handler.py` — form_alerts consumer with rate limiting
+- `services/guidance/src/guidance/main.py`
+
+**Decisions Made:** Notification.person_id left None in Phase 1 (anonymous tracking). Guidance stream is global (not per-camera) since guidance targets persons not cameras. LLM prompt capped at 30 words to keep audio TTS short.
+
+**Commit:** <!-- filled after commit -->
+
 <!-- Entries will be added here as tasks are completed -->

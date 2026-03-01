@@ -341,7 +341,7 @@
 
 ## T17: Exercise Service — Scaffold (pyproject.toml, Dockerfile, Config)
 
-- **Status:** `IN_QUEUE`
+- **Status:** `COMPLETE`
 - **Description:** Create `services/exercise/` scaffold: `pyproject.toml` (depends on `gym_shared`, `numpy`, `scipy`, `pyyaml`), `Dockerfile` (CPU-only, Python 3.11 slim), `src/exercise/config.py`, `src/exercise/main.py` stub.
 - **Why:** Scaffold must exist before implementing exercise analysis logic.
 - **Expected Results:** `docker compose build exercise` succeeds.
@@ -360,7 +360,7 @@
 
 ## T18: Exercise Service — Exercise Definitions YAML
 
-- **Status:** `IN_QUEUE`
+- **Status:** `COMPLETE`
 - **Description:** Create `services/exercise/data/exercises.yaml` defining the 4 Phase 1 exercises: squat, push-up, bicep curl, lateral raise. Each definition includes: primary joint pair for rep counting, `up_angle_threshold`, `down_angle_threshold`, form checks (joint, min_angle, max_angle, alert_message).
 - **Why:** The exercise registry loads this file. Making it data-driven means adding new exercises in Phase 3+ requires only a YAML edit, no code change.
 - **Expected Results:** YAML file that fully describes how to count reps and detect form issues for each of the 4 exercises.
@@ -381,7 +381,7 @@
 
 ## T19: Exercise Service — Exercise Registry
 
-- **Status:** `IN_QUEUE`
+- **Status:** `COMPLETE`
 - **Description:** Implement `services/exercise/src/exercise/exercise_registry.py`. Loads and validates `exercises.yaml` at startup. Provides `get_exercise(name: str) -> ExerciseDefinition` and `list_exercises() -> list[str]`.
 - **Why:** The rep counter and form analyzer look up exercise definitions at runtime. Centralizing this prevents hardcoded thresholds scattered through the code.
 - **Expected Results:** `ExerciseRegistry` class. `registry.get_exercise("squat")` returns an `ExerciseDefinition` dataclass with all thresholds loaded from YAML.
@@ -401,7 +401,7 @@
 
 ## T20: Exercise Service — Keypoint Utilities
 
-- **Status:** `IN_QUEUE`
+- **Status:** `COMPLETE`
 - **Description:** Implement `services/exercise/src/exercise/keypoint_utils.py`. Functions: `compute_angle(a, b, c) -> float` (angle at joint `b` given 3 keypoint coordinates), `smooth_signal(values: deque, window=5) -> float` (median filter), `keypoints_to_joint_angles(keypoints, exercise_def) -> dict[str, float]`.
 - **Why:** Rep counting and form analysis both need stable joint angle measurements. The smoothing prevents false rep counts from noise.
 - **Expected Results:** Pure functions, no I/O. `compute_angle` returns degrees (0-180). `smooth_signal` returns median of the deque.
@@ -421,7 +421,7 @@
 
 ## T21: Exercise Service — Rep Counter (State Machine)
 
-- **Status:** `IN_QUEUE`
+- **Status:** `COMPLETE`
 - **Description:** Implement `services/exercise/src/exercise/rep_counter.py`. Per-track state machine that transitions between `up` and `down` phases based on primary joint angle crossing thresholds. Increments `rep_count` on each complete `down → up` cycle. Emits a `RepCountedEvent` on each completed rep.
 - **Why:** Rep counting is the core metric the mobile app displays. It drives set tracking and progress statistics.
 - **Expected Results:** `RepCounter(exercise_def: ExerciseDefinition)` class. `update(track_id, angle) -> RepCountedEvent | None`. Handles multiple simultaneous tracks (one counter instance per track stored in a dict).
@@ -441,7 +441,7 @@
 
 ## T22: Exercise Service — Form Analyzer
 
-- **Status:** `IN_QUEUE`
+- **Status:** `COMPLETE`
 - **Description:** Implement `services/exercise/src/exercise/form_analyzer.py`. On each frame, checks all `form_checks` from the exercise definition against current joint angles. If a joint angle is outside `[min_angle, max_angle]` for 3+ consecutive frames, emit a `FormAlertEvent` with the alert message.
 - **Why:** Form alerts are the primary trigger for LLM guidance messages. They must be debounced (3 frames) to avoid flooding the guidance service.
 - **Expected Results:** `FormAnalyzer(exercise_def: ExerciseDefinition)`. `check(track_id, joint_angles: dict) -> list[FormAlertEvent]`. Alerts are debounced: same alert not re-emitted within 10 seconds for the same track.
@@ -461,7 +461,7 @@
 
 ## T23: Exercise Service — Heuristic Exercise Classifier
 
-- **Status:** `IN_QUEUE`
+- **Status:** `COMPLETE`
 - **Description:** Implement `services/exercise/src/exercise/classifier.py` (Phase 1 heuristic version). Infers exercise type by measuring which joint angle shows the most variance over the last 30 frames. Returns `(exercise_name: str, confidence: float)`. Will be replaced by ONNX TCN in Phase 3.
 - **Why:** Needed to automatically assign the correct `ExerciseDefinition` to a track without requiring manual input. Heuristic is good enough for Phase 1 prototype.
 - **Expected Results:** `HeuristicClassifier`. `classify(pose_window: list[dict]) -> tuple[str, float]`. If no dominant joint activity detected, returns `("unknown", 0.0)`.
@@ -481,7 +481,7 @@
 
 ## T24: Exercise Service — Integration (Consume Stream, Persist, Publish)
 
-- **Status:** `IN_QUEUE`
+- **Status:** `COMPLETE`
 - **Description:** Wire up `services/exercise/src/exercise/main.py`. Consumes `perceptions:{camera_id}` Redis Stream, runs Classifier → RepCounter → FormAnalyzer per tracked person per frame. Persists `ExerciseSet` and `RepEvent` rows to TimescaleDB. Publishes `rep_counted` and `form_alerts` events to Redis Streams.
 - **Why:** This is the integration point that turns raw pose data into structured workout events consumed by the guidance service and stored for the mobile app's stats tab.
 - **Expected Results:** With ingestion + perception running against a test video, `exercise_sets` and `rep_events` rows appear in the DB. `form_alerts` stream receives events when bad form is simulated.
@@ -501,7 +501,7 @@
 
 ## T25: Guidance Service — Scaffold (pyproject.toml, Dockerfile, Config)
 
-- **Status:** `IN_QUEUE`
+- **Status:** `COMPLETE`
 - **Description:** Create `services/guidance/` scaffold: `pyproject.toml` (depends on `gym_shared`, `anthropic`), `Dockerfile` (CPU, Python 3.11 slim), `src/guidance/config.py` (includes `ANTHROPIC_API_KEY`, rate limit settings), `src/guidance/main.py` stub.
 - **Why:** Scaffold must exist before implementing LLM client and alert handler.
 - **Expected Results:** `docker compose build guidance` succeeds.
@@ -520,7 +520,7 @@
 
 ## T26: Guidance Service — LLM Client (Anthropic SDK Wrapper)
 
-- **Status:** `IN_QUEUE`
+- **Status:** `COMPLETE`
 - **Description:** Implement `services/guidance/src/guidance/llm_client.py`. `GymLLMClient` class wrapping `AsyncAnthropic`. Method `generate_guidance(system_prompt, messages, tools=None) -> str`. Handles API errors gracefully (log + return `None` on failure, do not crash the service).
 - **Why:** All LLM calls route through this client. Centralizing error handling and model config here prevents duplication.
 - **Expected Results:** `GymLLMClient` using model `claude-sonnet-4-6`. Async. Returns the text content of the first response block.
@@ -540,7 +540,7 @@
 
 ## T27: Guidance Service — Form Alert Handler
 
-- **Status:** `IN_QUEUE`
+- **Status:** `COMPLETE`
 - **Description:** Implement `services/guidance/src/guidance/form_alert_handler.py`. Subscribes to `form_alerts` Redis Stream. For each alert: builds a short system prompt (exercise name, rep count, form issue), calls `GymLLMClient.generate_guidance()`, passes the result to `NotificationDispatcher`. Rate-limit: max 1 guidance message per 30 seconds per `track_id`.
 - **Why:** This is the critical path for real-time coaching. Form alert → LLM → audio on user's headphones.
 - **Expected Results:** `FormAlertHandler` async consumer. Processes form alerts, generates 1–2 sentence guidance, dispatches within ~2–3 seconds of the alert.
@@ -560,7 +560,7 @@
 
 ## T28: Guidance Service — Notification Dispatcher
 
-- **Status:** `IN_QUEUE`
+- **Status:** `COMPLETE`
 - **Description:** Implement `services/guidance/src/guidance/notification_dispatcher.py`. `dispatch(track_id, message)` — looks up the active WebSocket session for the track in Redis (`track:{track_id}:ws_session`), sends the guidance message over the WebSocket. Logs to `notifications` DB table. If no active WS session, logs and drops (Phase 1; Phase 2 adds push notifications).
 - **Why:** Delivers guidance to the user's phone/headphones. The WebSocket → TTS chain on the mobile app depends on this.
 - **Expected Results:** `NotificationDispatcher`. Sends message to the correct WS session. Inserts a row into `notifications` table.
