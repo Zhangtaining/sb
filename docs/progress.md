@@ -177,6 +177,6 @@
 
 **Context for Next Session:** T10–T16 COMPLETE. Visualizer can run immediately: `uv run python scripts/visualize_video.py input.mp4 output.mp4`. Full pipeline needs `make dev-up` then ingestion + perception services. Next tasks: T17–T24 (exercise service — scaffold, YAML, registry, rep counter, form analyzer, classifier, pipeline). T17 is the logical next step.
 
-**Commit:** <!-- filled after commit -->
+**Commit:** ee2b7f5
 
 <!-- Entries will be added here as tasks are completed -->
