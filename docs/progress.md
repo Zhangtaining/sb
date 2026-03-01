@@ -132,4 +132,51 @@
 
 **Commit:** 30fee6a
 
+## 2026-02-28 - T10: Scripts — Register Camera CLI
+
+**Summary:** Implemented `scripts/register_camera.py`. Async argparse CLI that inserts a Camera record into PostgreSQL using the shared ORM. Exits with code 1 and a clear message on duplicate ID.
+
+**Changes:**
+- `scripts/register_camera.py` — CLI tool: `--id`, `--rtsp-url`, `--zone`, `--description`
+
+**Decisions Made:** Uses `async with get_db()` directly — no migration tool or raw SQL needed.
+
+**Context for Next Session:** Run with `make dev-up` first to have the DB available.
+
+**Commit:** (see T16)
+
+---
+
+## 2026-02-28 - T11: Scripts — DB Setup Script
+
+**Summary:** Implemented `scripts/setup_db.py`. Thin wrapper around `uv run alembic upgrade head`. Supports `--check` flag to print current revision.
+
+**Changes:**
+- `scripts/setup_db.py` — runs migrations via subprocess; replaces manual `make migrate` in CI contexts
+
+**Commit:** (see T16)
+
+---
+
+## 2026-02-28 - T12–T16: Perception Service — Scaffold, YOLO Detector, Tracker, ReID, Pipeline
+
+**Summary:** Full perception service implemented. YOLO11n-pose loaded via ultralytics. ByteTrack tracking integrated via `model.track(persist=True)`. ReID is a zero-vector stub for Phase 1. Pipeline reads from `frames:{camera_id}` Redis Stream, runs detect+track+ReID per frame, publishes `PerceptionEvent` to `perceptions:{camera_id}`.
+
+**Changes:**
+- `services/perception/pyproject.toml` — pinned `torch<2.3` (macOS x86_64 compat), `numpy<2.0`, added `lap`; added back to workspace
+- `services/perception/src/perception/config.py` — `PerceptionConfig`, `build_config()` with auto device detection
+- `services/perception/src/perception/detector.py` — `Detector` class with `detect()` and `track()` methods; normalizes bbox + keypoints to [0,1]
+- `services/perception/src/perception/tracker.py` — re-exports `TrackedDetection` (tracking now handled inside `Detector.track()`)
+- `services/perception/src/perception/reid_extractor.py` — `ReIDExtractor` stub returning 256-d zero vector
+- `services/perception/src/perception/pipeline.py` — `PerceptionPipeline` async class; XREADGROUP → track → publish PerceptionEvent → XACK
+- `services/perception/src/perception/main.py` — entry point; shared Detector+ReID instances across camera pipelines
+- `scripts/visualize_video.py` — standalone script: YOLO+ByteTrack on an MP4, draws bboxes + skeletons, writes annotated output video
+- `services/ingestion/src/ingestion/config.py` — fixed `build_config()` to read `CAMERA_<ID>_RTSP_URL` from env properly via `os.environ`
+
+**Decisions Made:** Merged ByteTrack into `Detector.track()` using ultralytics' `model.track(persist=True)` — cleaner than manually integrating `BYTETracker` which expects a `Results` object in new ultralytics versions. `torch<2.3` is the constraint because 2.2.2 is the last macOS x86_64 wheel; production Docker uses CUDA and will remove the upper bound.
+
+**Context for Next Session:** T10–T16 COMPLETE. Visualizer can run immediately: `uv run python scripts/visualize_video.py input.mp4 output.mp4`. Full pipeline needs `make dev-up` then ingestion + perception services. Next tasks: T17–T24 (exercise service — scaffold, YAML, registry, rep counter, form analyzer, classifier, pipeline). T17 is the logical next step.
+
+**Commit:** <!-- filled after commit -->
+
 <!-- Entries will be added here as tasks are completed -->

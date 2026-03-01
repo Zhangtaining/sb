@@ -199,7 +199,7 @@
 
 ## T10: Scripts — Register Camera CLI
 
-- **Status:** `IN_QUEUE`
+- **Status:** `COMPLETE`
 - **Description:** Implement `scripts/register_camera.py`. CLI tool (argparse or click) that inserts a new `Camera` record into PostgreSQL. Accepts: `--id`, `--rtsp-url`, `--zone`, `--description`. Prints the created camera ID on success.
 - **Why:** Cameras must be registered in the DB before the ingestion service can be started for them. Used in Phase 1 verification step.
 - **Expected Results:** Running `python scripts/register_camera.py --id cam-01 --rtsp-url rtsp://... --zone weights` creates a row in the `cameras` table.
@@ -219,7 +219,7 @@
 
 ## T11: Scripts — DB Setup Script
 
-- **Status:** `IN_QUEUE`
+- **Status:** `COMPLETE`
 - **Description:** Implement `scripts/setup_db.py`. Runs Alembic migrations programmatically and seeds any required initial data (e.g., a default `gym-clips` MinIO bucket creation check). Used in `make migrate` target.
 - **Why:** New developers and CI need a single command to get a fresh DB ready.
 - **Expected Results:** `python scripts/setup_db.py` on a blank DB runs all migrations and prints success.
@@ -238,7 +238,7 @@
 
 ## T12: Perception Service — Scaffold (pyproject.toml, Dockerfile, Config)
 
-- **Status:** `IN_QUEUE`
+- **Status:** `COMPLETE`
 - **Description:** Create `services/perception/` scaffold: `pyproject.toml` (depends on `gym_shared`, `ultralytics`, `torchreid`, `opencv-python-headless`), `Dockerfile` (CUDA-capable base image: `pytorch/pytorch:2.3.0-cuda12.1-cudnn8-runtime`), `src/perception/config.py`, `src/perception/main.py` stub.
 - **Why:** Scaffold must exist before implementing detection/tracking logic.
 - **Expected Results:** `docker compose build perception` succeeds.
@@ -258,7 +258,7 @@
 
 ## T13: Perception Service — Person Detector (YOLOv11-pose)
 
-- **Status:** `IN_QUEUE`
+- **Status:** `COMPLETE`
 - **Description:** Implement `services/perception/src/perception/detector.py`. Wraps `ultralytics` YOLOv11-pose model. `detect(frame: np.ndarray) -> list[Detection]` returns bounding boxes + 17 keypoints per detected person. Uses nano (`yolo11n-pose.pt`) by default, configurable.
 - **Why:** Person detection + pose keypoints are the foundation for tracking, ReID, and exercise analysis.
 - **Expected Results:** `Detector` class that loads the model once at init. Returns a list of `Detection(bbox, keypoints, confidence)` per frame. Runs at >15 FPS on GPU for a single camera stream.
@@ -279,7 +279,7 @@
 
 ## T14: Perception Service — Intra-Camera Tracker (ByteTrack)
 
-- **Status:** `IN_QUEUE`
+- **Status:** `COMPLETE`
 - **Description:** Implement `services/perception/src/perception/tracker.py`. Wraps Ultralytics' built-in ByteTrack tracker. Assigns a stable `local_track_id` to each detected person across frames within a single camera.
 - **Why:** Without tracking, each frame gives anonymous detections with no continuity. Tracking lets the exercise service accumulate rep counts per person over time.
 - **Expected Results:** `Tracker` class that accepts a list of `Detection` objects per frame and returns `TrackedDetection` objects with a stable `local_track_id` that persists across frames.
@@ -299,7 +299,7 @@
 
 ## T15: Perception Service — ReID Feature Extractor (OSNet)
 
-- **Status:** `IN_QUEUE`
+- **Status:** `COMPLETE`
 - **Description:** Implement `services/perception/src/perception/reid_extractor.py`. Loads OSNet-x1.0 via `torchreid`. `extract(person_crop: np.ndarray) -> np.ndarray` returns a 256-d L2-normalized embedding vector.
 - **Why:** These embeddings are the basis for cross-camera person re-identification in Phase 2. Must be computed in Phase 1 so the data is available when Phase 2 builds on top.
 - **Expected Results:** `ReIDExtractor` class. Accepts an RGB crop of a person (any size), returns a `np.ndarray` of shape `(256,)`, L2-normalized.
@@ -320,7 +320,7 @@
 
 ## T16: Perception Service — Pipeline (Compose + Publish)
 
-- **Status:** `IN_QUEUE`
+- **Status:** `COMPLETE`
 - **Description:** Implement `services/perception/src/perception/pipeline.py` and wire up `main.py`. The pipeline: consumes frames from `frames:{camera_id}` Redis Stream (via `XREADGROUP`), runs Detector → Tracker → ReIDExtractor per frame, publishes a `PerceptionEvent` per tracked person to `perceptions:{camera_id}` Redis Stream.
 - **Why:** This is the core CV pipeline that transforms raw video frames into structured detections consumed by downstream services.
 - **Expected Results:** With ingestion running, `redis-cli XRANGE perceptions:cam-01 - + COUNT 1` returns a valid `PerceptionEvent` with `track_id`, `bbox`, `keypoints[33]`, `reid_embedding[256]`.
