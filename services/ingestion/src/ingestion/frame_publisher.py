@@ -40,6 +40,7 @@ class FramePublisher:
         self._redis_url = redis_url
         self._stop = stop_event
         self._stream = frames_stream(config.camera_id)
+        self._buffer_key = f"buffer:{config.camera_id}"
 
     async def run(self) -> None:
         """Main async loop — publishes frames until stop_event is set."""
@@ -68,6 +69,9 @@ class FramePublisher:
 
                 try:
                     msg_id = await publish(redis, self._stream, event, maxlen=100)
+                    # Maintain rolling buffer for video clip worker
+                    await redis.rpush(self._buffer_key, raw.jpeg_bytes)
+                    await redis.ltrim(self._buffer_key, -self._cfg.frame_buffer_size, -1)
                     log.debug(
                         "frame_published",
                         camera_id=self._cfg.camera_id,

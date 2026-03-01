@@ -1006,6 +1006,7 @@ version = "0.1.0"
 source = { editable = "services/guidance" }
 dependencies = [
     { name = "anthropic" },
+    { name = "celery", extra = ["redis"] },
     { name = "google-genai" },
     { name = "gym-shared" },
 ]
@@ -1013,6 +1014,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "anthropic", specifier = ">=0.30" },
+    { name = "celery", extras = ["redis"], specifier = ">=5.4" },
     { name = "google-genai", specifier = ">=1.0" },
     { name = "gym-shared", editable = "shared" },
 ]

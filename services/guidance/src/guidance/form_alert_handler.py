@@ -4,6 +4,7 @@ from __future__ import annotations
 import time
 
 import redis.asyncio as aioredis
+from celery import Celery
 
 from gym_shared.events.publisher import GROUP_GUIDANCE, ack, ensure_consumer_group, read_group
 from gym_shared.events.schemas import FormAlertEvent
@@ -42,6 +43,8 @@ class FormAlertHandler:
         self._dispatcher = dispatcher
         # track_id → timestamp of last guidance sent
         self._last_sent: dict[int, float] = {}
+        # Celery app for queueing clip tasks (fire-and-forget, no worker import)
+        self._celery = Celery(broker=config.redis_url)
 
     async def run(self, redis: aioredis.Redis) -> None:
         """Main loop consuming form_alerts."""
@@ -96,6 +99,22 @@ class FormAlertHandler:
             exercise_type=alert.exercise_type,
             timestamp_ns=alert.timestamp_ns,
         )
+
+        # Queue video clip save via Celery (fire-and-forget, no import from worker)
+        try:
+            self._celery.send_task(
+                "worker.tasks.video_clip.save_clip",
+                kwargs={
+                    "camera_id": alert.camera_id,
+                    "track_id": str(track_id),
+                    "exercise_set_id": alert.exercise_set_id,
+                    "timestamp_ns": alert.timestamp_ns,
+                },
+            )
+            log.debug("video_clip_task_queued", exercise_set_id=alert.exercise_set_id)
+        except Exception as exc:
+            log.warning("video_clip_task_error", error=str(exc))
+
         log.info(
             "guidance_generated",
             track_id=track_id,
