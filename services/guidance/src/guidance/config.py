@@ -11,7 +11,10 @@ class GuidanceConfig:
     redis_url: str = "redis://localhost:6379/0"
     database_url: str = "postgresql+asyncpg://gym:gympass@localhost:5432/gymdb"
 
+    # LLM provider selection: "anthropic" | "gemini"
+    llm_provider: str = "anthropic"
     anthropic_api_key: str = ""
+    gemini_api_key: str = ""
     llm_model: str = "claude-sonnet-4-6"
     llm_max_tokens: int = 1024
 
@@ -28,7 +31,9 @@ def build_config(settings) -> GuidanceConfig:
         camera_ids=settings.camera_id_list,
         redis_url=settings.redis_url,
         database_url=settings.database_url,
+        llm_provider=settings.llm_provider,
         anthropic_api_key=settings.anthropic_api_key,
+        gemini_api_key=settings.gemini_api_key,
         llm_model=settings.llm_model,
         llm_max_tokens=settings.llm_max_tokens,
         rate_limit_seconds=settings.guidance_rate_limit_seconds,

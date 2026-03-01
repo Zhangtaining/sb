@@ -32,6 +32,9 @@ class Settings(BaseSettings):
     # Anthropic
     anthropic_api_key: str = Field(default="")
 
+    # Google Gemini
+    gemini_api_key: str = Field(default="")
+
     # API
     api_host: str = Field(default="0.0.0.0")
     api_port: int = Field(default=8000)
@@ -40,6 +43,7 @@ class Settings(BaseSettings):
 
     # Guidance
     guidance_rate_limit_seconds: int = Field(default=30)
+    llm_provider: str = Field(default="anthropic", description="'anthropic' | 'gemini'")
     llm_model: str = Field(default="claude-sonnet-4-6")
     llm_max_tokens: int = Field(default=1024)
 

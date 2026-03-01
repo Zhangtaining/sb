@@ -21,18 +21,16 @@ async def run() -> None:
     configure_logging(settings.log_format, settings.log_level)
     config = build_config(settings)
 
-    if not config.anthropic_api_key:
+    if config.llm_provider == "anthropic" and not config.anthropic_api_key:
         log.warning("no_anthropic_api_key", message="LLM calls will fail — set ANTHROPIC_API_KEY")
+    elif config.llm_provider == "gemini" and not config.gemini_api_key:
+        log.warning("no_gemini_api_key", message="LLM calls will fail — set GEMINI_API_KEY")
 
-    log.info("guidance_service_starting", model=config.llm_model)
+    log.info("guidance_service_starting", provider=config.llm_provider, model=config.llm_model)
 
     redis = aioredis.from_url(config.redis_url, decode_responses=False)
 
-    llm = GymLLMClient(
-        api_key=config.anthropic_api_key,
-        model=config.llm_model,
-        max_tokens=config.llm_max_tokens,
-    )
+    llm = GymLLMClient(config)
 
     # One dispatcher per camera (guidance stream is global, not per-camera)
     dispatcher = NotificationDispatcher(redis, camera_id=config.camera_ids[0] if config.camera_ids else "unknown")
