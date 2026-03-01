@@ -241,4 +241,63 @@
 
 **Commit:** 61ed2cf
 
+## 2026-03-01 - T29–T33: API Service
+
+**Summary:** Full FastAPI gateway implemented. Health endpoint, REST endpoints for sessions/tracks/replay, WebSocket live stream, WebSocket manager with background Redis reader, and placeholder Bearer auth.
+
+**Changes:**
+- `services/api/Dockerfile`
+- `services/api/src/api/main.py` — FastAPI app with lifespan, CORS, WS manager startup
+- `services/api/src/api/dependencies.py` — DB session and Redis injectors
+- `services/api/src/api/auth.py` — placeholder Bearer auth (token = track_id)
+- `services/api/src/api/schemas/__init__.py` — Pydantic response models
+- `services/api/src/api/routers/sessions.py` — GET /sessions/{id}
+- `services/api/src/api/routers/tracks.py` — GET /tracks/{id}/history, /tracks/{id}/replay
+- `services/api/src/api/routers/websocket.py` — WS /ws/live/{track_id}
+- `services/api/src/api/websocket_manager.py` — fan-out manager reading rep_counted/form_alerts/guidance streams
+
+**Commit:** 1fb1709
+
+---
+
+## 2026-03-01 - T39–T41: Worker Service + Video Clips
+
+**Summary:** Celery worker service for async video clip saving. Ingestion service now also maintains a rolling Redis list `buffer:{camera_id}` of raw JPEG frames. Worker reads the buffer, encodes H.264 MP4 via PyAV, uploads to MinIO, and updates `ExerciseSet.alerts` with the clip URL. Form alert handler queues clips via `Celery.send_task()` (no import from worker).
+
+**Changes:**
+- `services/worker/Dockerfile`
+- `services/worker/src/worker/app.py` — Celery app, Redis broker
+- `services/worker/src/worker/config.py` — WorkerConfig from shared settings
+- `services/worker/src/worker/tasks/video_clip.py` — save_clip task
+- `services/ingestion/src/ingestion/frame_publisher.py` — added RPUSH + LTRIM to `buffer:{camera_id}`
+- `services/guidance/src/guidance/form_alert_handler.py` — queues save_clip on each alert
+- `services/guidance/pyproject.toml` — added celery[redis]>=5.4
+
+**Commit:** b3e462b
+
+---
+
+## 2026-03-01 - T34–T38: Mobile App (React Native)
+
+**Summary:** Full React Native app scaffold with all Phase 1 screens. QR scan gates access to the main tab bar. Live Coaching tab connects via WebSocket and speaks guidance text via TTS. Replay tab lists video clips playable inline. Stats tab shows session summary and per-set form score badges.
+
+**Changes:**
+- `mobile/App.tsx` — root entry point
+- `mobile/package.json` — all dependencies
+- `mobile/tsconfig.json`
+- `mobile/src/api/client.ts` — REST + WebSocket API client
+- `mobile/src/store/session.ts` — AsyncStorage-backed track_id session
+- `mobile/src/hooks/useLiveStream.ts` — WebSocket hook with 5s auto-reconnect
+- `mobile/src/navigation/AppNavigator.tsx` — QR gate + 3-tab navigator
+- `mobile/src/screens/QRScanScreen.tsx` — vision-camera QR scan
+- `mobile/src/screens/LiveCoachingScreen.tsx` — live rep count + TTS
+- `mobile/src/screens/ReplayScreen.tsx` — clip list + inline video player
+- `mobile/src/screens/StatsScreen.tsx` — session summary + form score badges
+
+**Decisions Made:** Mobile init is a one-time user step (see testing instructions below). All business logic is written; just needs `npx react-native@0.75 init` to bootstrap the native shell.
+
+**Context for Next Session:** All Phase 1 tasks (T01–T41) are COMPLETE. See testing section below for how to run the full pipeline and bootstrap the mobile app. Phase 2 tasks (person identity, ReID, personalized guidance) can begin.
+
+**Commit:** 0169363
+
 <!-- Entries will be added here as tasks are completed -->

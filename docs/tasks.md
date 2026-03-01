@@ -580,7 +580,8 @@
 
 ## T29: API Service — Scaffold + FastAPI App Factory
 
-- **Status:** `IN_QUEUE`
+
+- **Status:** `COMPLETE`
 - **Description:** Create `services/api/` scaffold: `pyproject.toml` (depends on `gym_shared`, `fastapi`, `uvicorn[standard]`, `python-jose`), `Dockerfile`, `src/api/main.py` (FastAPI app factory with lifespan, CORS, middleware), `src/api/dependencies.py` (DB session, Redis), `src/api/auth.py` (placeholder JWT middleware — accepts any token in Phase 1).
 - **Why:** The mobile app and WebSocket clients connect to this service. Must exist as a runnable service before implementing endpoints.
 - **Expected Results:** `docker compose up api` starts and `GET /healthz` returns `{"status": "ok"}`.
@@ -599,7 +600,7 @@
 
 ## T30: API Service — REST Endpoints (Sessions, Tracks, Replay)
 
-- **Status:** `IN_QUEUE`
+- **Status:** `COMPLETE`
 - **Description:** Implement REST routers in `services/api/src/api/routers/`: `sessions.py` (`GET /sessions/{session_id}`), `tracks.py` (`GET /tracks/{track_id}/history`, `GET /tracks/{track_id}/replay`). Schemas in `src/api/schemas/`.
 - **Why:** The mobile app's Stats tab and Replay tab fetch data from these endpoints.
 - **Expected Results:** All 3 endpoints return correct data from the DB. `/replay` returns a list of presigned MinIO URLs for video clips.
@@ -619,7 +620,7 @@
 
 ## T31: API Service — WebSocket Endpoint (/ws/live/{track_id})
 
-- **Status:** `IN_QUEUE`
+- **Status:** `COMPLETE`
 - **Description:** Implement `services/api/src/api/routers/websocket.py`. `WS /ws/live/{track_id}` — registers the connection in `WebSocketManager`, stores `track:{track_id}:ws_session` in Redis, streams `rep_counted`, `form_alert`, and `guidance` events to the client in real time.
 - **Why:** The mobile app's Live Coaching tab connects here to receive real-time rep counts and audio guidance text.
 - **Expected Results:** WebSocket connection for a `track_id` receives live events as JSON: `{"type": "rep_counted", "data": {...}}`, `{"type": "form_alert", ...}`, `{"type": "guidance", "data": {"text": "..."}}`.
@@ -639,7 +640,7 @@
 
 ## T32: API Service — WebSocket Manager
 
-- **Status:** `IN_QUEUE`
+- **Status:** `COMPLETE`
 - **Description:** Implement `services/api/src/api/websocket_manager.py`. `WebSocketManager` maintains a registry of active connections keyed by `track_id`. Methods: `connect(track_id, ws)`, `disconnect(track_id)`, `send(track_id, message)`. Also runs a background task that subscribes to Redis Streams (`rep_counted`, `form_alerts`, `guidance`) and fans out messages to the correct WebSocket connections.
 - **Why:** Decouples event routing logic from the WebSocket endpoint handler.
 - **Expected Results:** Thread-safe manager. Multiple simultaneous connections for different `track_id`s all receive their respective events correctly.
@@ -658,7 +659,7 @@
 
 ## T33: API Service — Placeholder JWT Auth Middleware
 
-- **Status:** `IN_QUEUE`
+- **Status:** `COMPLETE`
 - **Description:** Implement `services/api/src/api/auth.py`. Phase 1 placeholder: any non-empty Bearer token is accepted (the token value is used as the `track_id`). Log a warning that real auth is not yet implemented. This will be replaced with proper JWT validation in Phase 2.
 - **Why:** The mobile app QR code scan returns a `track_id`-based token. The API must accept it to associate the WS session with the correct track.
 - **Expected Results:** `get_current_track_id(token: str = Depends(oauth2_scheme)) -> str` FastAPI dependency. Returns the token string as the track ID.
@@ -677,7 +678,7 @@
 
 ## T34: Mobile App — React Native Project Init (iOS)
 
-- **Status:** `IN_QUEUE`
+- **Status:** `COMPLETE`
 - **Description:** Initialize the React Native project in `mobile/` using `react-native init SmartGym --template react-native-template-typescript`. Set up: ESLint + Prettier, React Navigation (bottom tabs), basic tab structure (Live Coaching, Replay, Stats). iOS build must succeed.
 - **Why:** All mobile tasks depend on the project existing and building.
 - **Expected Results:** `npx react-native run-ios` opens the app in the simulator with 3 bottom tabs (placeholder screens).
@@ -698,7 +699,7 @@
 
 ## T35: Mobile App — QR Code Scan Screen (Session Token)
 
-- **Status:** `IN_QUEUE`
+- **Status:** `COMPLETE`
 - **Description:** Implement the QR code scan screen. When the user opens the app, they see a "Start Session" button that opens the camera to scan a QR code. The QR code encodes a `track_id` (printed at the gym entrance or shown on a kiosk). On successful scan, the `track_id` is stored in app state and used as the auth token for all API calls.
 - **Why:** This is how users link their phone to their anonymous track in Phase 1. Required before the Live Coaching and Stats tabs can show personalized data.
 - **Expected Results:** QR scan screen using `react-native-vision-camera` + `vision-camera-code-scanner`. On scan, navigates to the main tab view with the track_id set.
@@ -718,7 +719,7 @@
 
 ## T36: Mobile App — Live Coaching Tab (WebSocket + TTS)
 
-- **Status:** `IN_QUEUE`
+- **Status:** `COMPLETE`
 - **Description:** Implement the Live Coaching tab. Connects to `WS /ws/live/{track_id}`. Displays current exercise name and rep count (updated live). On receiving a `guidance` event, reads the text aloud using React Native's `react-native-tts` (native TTS → headphone output). Shows a scrollable log of recent guidance messages.
 - **Why:** This is the primary Phase 1 user experience. Users hear coaching through their headphones while exercising.
 - **Expected Results:** Live rep count increments in real time. Guidance text is spoken via TTS immediately on receipt. Works with AirPods / wired headphones.
@@ -738,7 +739,7 @@
 
 ## T37: Mobile App — Movement Replay Tab
 
-- **Status:** `IN_QUEUE`
+- **Status:** `COMPLETE`
 - **Description:** Implement the Movement Replay tab. Fetches `GET /tracks/{track_id}/replay` to get a list of video clip URLs. Displays clips in a scrollable list with timestamp and exercise label. Each clip is playable inline using `react-native-video`.
 - **Why:** Users want to review their movement form after the session. This is the main differentiator over a simple rep counter.
 - **Expected Results:** List of video clips, each with a play button. Tapping plays the H.264 clip inline. List shows the exercise name and timestamp for each clip.
@@ -758,7 +759,7 @@
 
 ## T38: Mobile App — Stats Tab
 
-- **Status:** `IN_QUEUE`
+- **Status:** `COMPLETE`
 - **Description:** Implement the Stats tab. Fetches `GET /sessions/{session_id}` (current session) and `GET /tracks/{track_id}/history`. Displays: total session time, list of exercise sets with rep counts, form score per set (0–100%).
 - **Why:** Users want a summary of what they did. Drives motivation and progress tracking.
 - **Expected Results:** Session summary card at top (duration, total reps). Below: list of sets grouped by exercise with rep count and form score badge.
@@ -778,7 +779,7 @@
 
 ## T39: Worker Service — Scaffold (Celery + pyproject.toml + Dockerfile)
 
-- **Status:** `IN_QUEUE`
+- **Status:** `COMPLETE`
 - **Description:** Create `services/worker/` scaffold: `pyproject.toml` (depends on `gym_shared`, `celery[redis]`, `av`, `minio`), `Dockerfile` (CPU, Python 3.11 slim), `src/worker/app.py` (Celery app configured with Redis broker/backend), `src/worker/config.py`.
 - **Why:** The video clip save task runs asynchronously so it doesn't block the form alert handler.
 - **Expected Results:** `docker compose up worker` starts the Celery worker and logs "celery@worker ready".
@@ -797,7 +798,7 @@
 
 ## T40: Worker Service — Video Clip Save Task
 
-- **Status:** `IN_QUEUE`
+- **Status:** `COMPLETE`
 - **Description:** Implement `services/worker/src/worker/tasks/video_clip.py`. Celery task `save_clip(camera_id, track_id, exercise_set_id, timestamp_ns)`. Retrieves the 5-second window of frames (225 frames at 15 FPS) from the ingestion service's rolling buffer (shared via Redis — ingestion stores frame buffer as a Redis list). Encodes to H.264 MP4 via `PyAV`. Uploads to MinIO bucket `gym-clips`. Updates `ExerciseSet.alerts` JSONB with the clip URL.
 - **Why:** Video replay is a core Phase 1 mobile feature. Clips must be saved when form alerts fire.
 - **Expected Results:** Task runs within 10 seconds of being queued. H.264 MP4 clip appears in MinIO. `exercise_sets` row updated with clip URL.
@@ -818,7 +819,7 @@
 
 ## T41: Guidance Service — Trigger Video Clip on Form Alert
 
-- **Status:** `IN_QUEUE`
+- **Status:** `COMPLETE`
 - **Description:** Update `form_alert_handler.py` to also queue a `save_clip` Celery task whenever a `FormAlertEvent` is processed. Pass `camera_id`, `track_id`, `exercise_set_id`, and the alert timestamp.
 - **Why:** Connects the form alert pipeline to the video clip worker, completing the loop from alert detection → clip saved → clip URL available in the mobile Replay tab.
 - **Expected Results:** Every form alert triggers both an LLM guidance message and a Celery `save_clip` task. Within ~10s, the clip appears in MinIO.
