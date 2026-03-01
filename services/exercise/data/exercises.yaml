@@ -1,0 +1,119 @@
+# Exercise definitions for Phase 1 rep counting and form analysis.
+#
+# Keypoint indices follow YOLO 17-point COCO convention:
+#   0=nose  1=L-eye  2=R-eye  3=L-ear  4=R-ear
+#   5=L-shoulder  6=R-shoulder
+#   7=L-elbow     8=R-elbow
+#   9=L-wrist    10=R-wrist
+#  11=L-hip      12=R-hip
+#  13=L-knee     14=R-knee
+#  15=L-ankle    16=R-ankle
+#
+# primary_joint: [a, b, c] — angle measured at keypoint b
+# up_angle:   angle threshold for the "up" (extended) phase
+# down_angle: angle threshold for the "down" (flexed) phase
+# A rep is counted on transition: up → down → up
+
+exercises:
+
+  squat:
+    name: squat
+    # Angle at the knee: hip(11) – knee(13) – ankle(15), left side
+    primary_joint: [11, 13, 15]
+    up_angle: 160      # standing upright — knee nearly straight
+    down_angle: 100    # parallel depth — knee at ~90-100°
+    form_checks:
+      - name: knee_cave
+        # Knee should track over foot — check knee x relative to hip x
+        # Implemented as a heuristic in form_analyzer.py
+        joint: [11, 13, 15]
+        min_angle: 80
+        max_angle: 180
+        alert_key: knee_cave
+        alert_message: "Keep your knees in line with your toes — don't let them collapse inward."
+        severity: warning
+      - name: depth
+        joint: [11, 13, 15]
+        min_angle: 0
+        max_angle: 115   # if angle never drops below 115, depth is too shallow
+        alert_key: shallow_depth
+        alert_message: "Try to squat a little deeper — aim for thighs parallel to the floor."
+        severity: info
+      - name: torso_lean
+        # Hip – shoulder angle (11→5 vertical deviation) for excessive forward lean
+        joint: [13, 11, 5]
+        min_angle: 45
+        max_angle: 180
+        alert_key: excessive_forward_lean
+        alert_message: "Keep your chest up — you're leaning too far forward."
+        severity: warning
+
+  push_up:
+    name: push_up
+    # Angle at the elbow: shoulder(5) – elbow(7) – wrist(9), left side
+    primary_joint: [5, 7, 9]
+    up_angle: 155      # arms extended
+    down_angle: 80     # chest near floor
+    form_checks:
+      - name: elbow_flare
+        joint: [5, 7, 9]
+        min_angle: 0
+        max_angle: 100   # elbows should not flare past 90° from torso
+        alert_key: elbow_flare
+        alert_message: "Tuck your elbows closer to your body — don't let them flare out to the sides."
+        severity: warning
+      - name: hip_sag
+        # Hip should stay level with shoulders and ankles
+        # hip(11) – shoulder(5) – ankle(15) angle check
+        joint: [5, 11, 15]
+        min_angle: 160
+        max_angle: 180
+        alert_key: hip_sag
+        alert_message: "Keep your core tight — your hips are sagging toward the floor."
+        severity: warning
+
+  bicep_curl:
+    name: bicep_curl
+    # Angle at the elbow: shoulder(5) – elbow(7) – wrist(9), left side
+    primary_joint: [5, 7, 9]
+    up_angle: 50       # fully curled
+    down_angle: 155    # arm extended
+    form_checks:
+      - name: elbow_drift
+        # Elbow should stay pinned to side — check elbow x stays close to hip x
+        joint: [11, 7, 9]
+        min_angle: 0
+        max_angle: 160
+        alert_key: elbow_drift
+        alert_message: "Keep your elbow pinned to your side — don't let it swing forward."
+        severity: warning
+      - name: incomplete_extension
+        joint: [5, 7, 9]
+        min_angle: 140
+        max_angle: 180
+        alert_key: incomplete_extension
+        alert_message: "Fully extend your arm at the bottom of each rep for the full range of motion."
+        severity: info
+
+  lateral_raise:
+    name: lateral_raise
+    # Angle at the shoulder: hip(11) – shoulder(5) – elbow(7), left side
+    primary_joint: [11, 5, 7]
+    up_angle: 75       # arm raised ~parallel to floor
+    down_angle: 20     # arm at side
+    form_checks:
+      - name: overextension
+        joint: [11, 5, 7]
+        min_angle: 0
+        max_angle: 95    # raising above shoulder level adds AC joint stress
+        alert_key: overextension
+        alert_message: "Don't raise your arms above shoulder height — stop when they're parallel to the floor."
+        severity: info
+      - name: elbow_bend
+        # Elbow should be slightly bent but not deeply flexed
+        joint: [5, 7, 9]
+        min_angle: 140
+        max_angle: 180
+        alert_key: excessive_elbow_bend
+        alert_message: "Keep a slight bend in your elbows — don't curl your arm during the raise."
+        severity: info
