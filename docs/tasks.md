@@ -8,7 +8,7 @@
 
 ## T01: Monorepo Scaffold — Directory Structure, Makefile, .env.example
 
-- **Status:** `IN_PROGRESS`
+- **Status:** `COMPLETE`
 - **Description:** Create the top-level project skeleton. Initialize `uv` workspace. Create all service/shared directory stubs. Write `Makefile` with `dev-up`, `dev-down`, `migrate`, `test` targets. Write `.env.example` with all required variables.
 - **Why:** Every other task depends on the repo structure existing. Must be the first task done.
 - **Expected Results:** Running `make dev-up` starts the Docker services (even if services are empty). All directories from PLAN.md exist. `.env.example` documents every required env var.
@@ -30,7 +30,7 @@
 
 ## T02: Shared Package — Settings, Logging, Redis Client
 
-- **Status:** `IN_QUEUE`
+- **Status:** `COMPLETE`
 - **Description:** Create the `shared/` internal Python package (`gym_shared`). Implement: Pydantic `BaseSettings` for shared config (reads from `.env`), `structlog` structured logging setup, async Redis client factory.
 - **Why:** All services import from `gym_shared`. Must exist before any service code is written.
 - **Expected Results:** `gym_shared` package installable via `uv`. `from gym_shared.redis_client import get_redis` works. `from gym_shared.settings import Settings` works.
@@ -51,7 +51,7 @@
 
 ## T03: Shared Package — SQLAlchemy ORM Models
 
-- **Status:** `IN_QUEUE`
+- **Status:** `COMPLETE`
 - **Description:** Implement all Phase 1 SQLAlchemy 2.0 async ORM models in `shared/src/gym_shared/db/models.py`: `Camera`, `Track`, `GymSession`, `ExerciseSet`, `RepEvent` (TimescaleDB hypertable), `PoseFrame` (TimescaleDB hypertable).
 - **Why:** All services that read/write the database import these models. Must be defined before migrations.
 - **Expected Results:** All 6 models defined using `Mapped[T]` / `mapped_column()` style. Relationships defined between models. `pgvector` `Vector` type used where specified in PLAN.md.
@@ -72,7 +72,7 @@
 
 ## T04: Shared Package — Alembic Migrations + DB Session Factory
 
-- **Status:** `IN_QUEUE`
+- **Status:** `COMPLETE`
 - **Description:** Set up Alembic for async migrations. Write the initial migration that: enables `pgvector` and `timescaledb` extensions, creates all Phase 1 tables, converts `rep_events` and `pose_frames` to TimescaleDB hypertables. Implement async SQLAlchemy session factory in `shared/src/gym_shared/db/session.py`.
 - **Why:** Services cannot persist data until the schema exists. `make migrate` must work.
 - **Expected Results:** `make migrate` runs cleanly against a fresh PostgreSQL+TimescaleDB container. All tables exist. `rep_events` and `pose_frames` are hypertables.
@@ -94,7 +94,7 @@
 
 ## T05: Docker Compose — Infrastructure Services
 
-- **Status:** `IN_QUEUE`
+- **Status:** `COMPLETE`
 - **Description:** Write `docker-compose.yml` defining: PostgreSQL 16 + TimescaleDB, Redis 7, MinIO, Nginx. Write `infrastructure/nginx/nginx.conf`. All services should have health checks. Volumes for data persistence.
 - **Why:** All development and testing depends on these containers being available via `make dev-up`.
 - **Expected Results:** `make dev-up` starts all 4 infrastructure containers healthy. PostgreSQL accessible on port 5432, Redis on 6379, MinIO on 9000/9001.
@@ -116,7 +116,7 @@
 
 ## T06: Shared Package — Redis Streams Event Schemas
 
-- **Status:** `IN_QUEUE`
+- **Status:** `COMPLETE`
 - **Description:** Define all Pydantic v2 event schemas used on Redis Streams in `shared/src/gym_shared/events/schemas.py`. Write helper publisher in `shared/src/gym_shared/events/publisher.py` that serializes and `XADD`s to a stream. Implement a consumer helper for `XREAD`/`XREADGROUP`.
 - **Why:** Ingestion, perception, exercise, and guidance services all communicate via Redis Streams. Having typed schemas prevents silent data corruption between services.
 - **Expected Results:** Schemas defined: `FrameMessage`, `PerceptionEvent`, `RepCountedEvent`, `FormAlertEvent`, `GuidanceMessage`. Publisher and consumer helpers work.
@@ -137,7 +137,7 @@
 
 ## T07: Ingestion Service — Scaffold (pyproject.toml, Dockerfile, Config)
 
-- **Status:** `IN_QUEUE`
+- **Status:** `COMPLETE`
 - **Description:** Create `services/ingestion/` service scaffold: `pyproject.toml` (depends on `gym_shared`, `av`, `opencv-python-headless`), `Dockerfile` (Python 3.11 slim base), `src/ingestion/config.py` (Pydantic settings for camera list, FPS, JPEG quality), `src/ingestion/main.py` (entry point stub).
 - **Why:** Scaffold must exist before implementing the camera reader logic.
 - **Expected Results:** `docker compose build ingestion` succeeds. Service starts and logs "Ingestion service starting" then exits cleanly (stub).
@@ -157,7 +157,7 @@
 
 ## T08: Ingestion Service — Camera Reader (RTSP → Frame Buffer)
 
-- **Status:** `IN_QUEUE`
+- **Status:** `COMPLETE`
 - **Description:** Implement `services/ingestion/src/ingestion/camera_reader.py`. One thread per camera that opens an RTSP stream via `av` (hardware H.264 decode preferred, fallback to software). Reads frames, downsamples to configured FPS (default 15), compresses to JPEG at quality 85. Pushes compressed frames to an in-memory `queue.Queue` (the frame buffer).
 - **Why:** This is the entry point for all video data into the system.
 - **Expected Results:** `CameraReader` class that accepts a `CameraConfig` and a `Queue`. Runs as a daemon thread. Handles reconnection on stream drop (retry with exponential backoff, max 30s).
@@ -178,7 +178,7 @@
 
 ## T09: Ingestion Service — Frame Publisher (Queue → Redis Stream)
 
-- **Status:** `IN_QUEUE`
+- **Status:** `COMPLETE`
 - **Description:** Implement `services/ingestion/src/ingestion/frame_publisher.py`. Reads frames from the `CameraReader` queue, serializes them as `FrameMessage`, and `XADD`s to `frames:{camera_id}` Redis Stream with `MAXLEN ~100` (trimming cap to prevent memory blow-up).
 - **Why:** The perception service consumes from this stream. Without the publisher, the pipeline cannot flow.
 - **Expected Results:** Frames appear in Redis Stream `frames:cam-01` at ~15 FPS. Stream length stays bounded at ~100 entries under load.
