@@ -25,12 +25,23 @@ class IngestionConfig:
 
 
 def build_config(settings) -> IngestionConfig:
-    """Build IngestionConfig from shared gym_shared.settings.Settings."""
+    """Build IngestionConfig from shared gym_shared.settings.Settings.
+
+    Per-camera RTSP URLs are read from environment variables of the form:
+        CAMERA_<ID>_RTSP_URL=rtsp://...
+    where <ID> is the camera ID with dashes replaced by underscores, uppercased.
+    Example: camera ID "cam-01" → CAMERA_CAM_01_RTSP_URL
+
+    If the env var is not set, falls back to CAMERA_DEFAULT_RTSP_URL,
+    then to "rtsp://<camera_id>/live" as a last resort.
+    """
+    import os
+
     cameras = []
+    default_rtsp = os.environ.get("CAMERA_DEFAULT_RTSP_URL", "")
     for camera_id in settings.camera_id_list:
-        rtsp_env_key = f"CAMERA_{camera_id.upper().replace('-', '_')}_RTSP"
-        # Cameras without an explicit RTSP URL will use a placeholder
-        rtsp_url = getattr(settings, rtsp_env_key.lower(), f"rtsp://{camera_id}/live")
+        env_key = f"CAMERA_{camera_id.upper().replace('-', '_')}_RTSP_URL"
+        rtsp_url = os.environ.get(env_key) or default_rtsp or f"rtsp://{camera_id}/live"
         cameras.append(
             CameraConfig(
                 camera_id=camera_id,
