@@ -1024,7 +1024,7 @@
 
 ## T49: Guidance Service — Personalized Prompt Builder
 
-- **Status:** `IN_QUEUE`
+- **Status:** `COMPLETE`
 - **Description:** Implement `services/guidance/src/guidance/prompt_builder.py`. `PromptBuilder` class:
   - `build_system_prompt(person_id) -> str` — fetches person's name, goals, injury notes, last 5 sessions summary from DB; constructs a rich system prompt personalizing the AI trainer persona
   - `build_form_alert_prompt(person, exercise, rep_count, alert_message) -> str` — personalized form correction prompt using person's name and history
@@ -1046,7 +1046,7 @@
 
 ## T50: Guidance Service — LLM Tool Definitions + Executor
 
-- **Status:** `IN_QUEUE`
+- **Status:** `COMPLETE`
 - **Description:** Implement `services/guidance/src/guidance/tool_definitions.py` and `tool_executor.py`. Tools:
   - `get_workout_history(person_id, days=7)` — returns list of sessions with exercises, reps, form scores
   - `get_exercise_stats(person_id, exercise_name)` — returns personal bests, average form score, trend
@@ -1069,7 +1069,7 @@
 
 ## T51: Guidance Service — Session Onboarding Conversation
 
-- **Status:** `IN_QUEUE`
+- **Status:** `COMPLETE`
 - **Description:** Implement `services/guidance/src/guidance/session_onboarding.py`. `SessionOnboardingHandler`:
   - Triggered by `identity_resolved` events from Redis Stream (new session detected)
   - Calls `PromptBuilder.build_onboarding_prompt(person)` to greet user and ask about today's goals
@@ -1095,7 +1095,7 @@
 
 ## T52: Guidance Service — Conversation Manager (Full Chat + RAG)
 
-- **Status:** `IN_QUEUE`
+- **Status:** `COMPLETE`
 - **Description:** Implement `services/guidance/src/guidance/conversation_manager.py`. `ConversationManager`:
   - `send_message(conversation_id, person_id, user_text) -> str` — adds user message to `messages` table, builds context (last 20 messages from Redis, older ones summarized), queries RAG (`GymKnowledge` pgvector search, top-3 chunks injected into system prompt), calls LLM with tools, persists assistant reply, returns text
   - Context window management: keep last 20 messages in Redis `conv:{conversation_id}:messages`; when count exceeds 20, summarize oldest 10 via LLM and replace with summary
@@ -1117,7 +1117,7 @@
 
 ## T53: API Service — Conversation Endpoints + JWT Auth Upgrade
 
-- **Status:** `IN_QUEUE`
+- **Status:** `COMPLETE`
 - **Description:** Two parts:
   1. Add conversation endpoints to `services/api/src/api/routers/conversations.py`:
      - `POST /conversations` — create a new conversation for the current person+session

@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from gym_shared.logging import configure_logging, get_logger
 from gym_shared.settings import settings
 
-from api.routers import sessions, tracks
+from api.routers import conversations, sessions, tracks
 from api.routers import websocket as ws_router
 from api.websocket_manager import WebSocketManager
 
@@ -63,6 +63,7 @@ def create_app() -> FastAPI:
     app.include_router(sessions.router)
     app.include_router(tracks.router)
     app.include_router(ws_router.router)
+    app.include_router(conversations.router)
 
     @app.get("/healthz", tags=["health"])
     async def healthz():

@@ -44,3 +44,37 @@ class ClipInfo(BaseModel):
 class ReplayResponse(BaseModel):
     track_id: uuid.UUID
     clips: list[ClipInfo]
+
+
+# ── Phase 2: Conversations ─────────────────────────────────────────────────────
+
+class ConversationCreateRequest(BaseModel):
+    person_id: uuid.UUID
+    session_id: uuid.UUID | None = None
+
+
+class ConversationResponse(BaseModel):
+    id: uuid.UUID
+    person_id: uuid.UUID
+    session_id: uuid.UUID | None
+    started_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class MessageRequest(BaseModel):
+    text: str
+
+
+class MessageResponse(BaseModel):
+    role: str
+    content: str
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class ChatResponse(BaseModel):
+    conversation_id: uuid.UUID
+    user_message: str
+    assistant_response: str
