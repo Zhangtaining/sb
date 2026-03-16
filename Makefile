@@ -85,6 +85,15 @@ register-camera:
 	@export PATH="$$HOME/.local/bin:$$PATH" && \
 	  uv run python scripts/register_camera.py --id $(id) --rtsp-url $(url) --zone $(zone)
 
+## Register a gym member (usage: make register-person name="John Smith" goals="strength,weight_loss")
+## Optional: photos=~/face_photos/john  injury="left knee"  (or skip-face=1 to skip face enrollment)
+register-person:
+	@export PATH="$$HOME/.local/bin:$$PATH" && \
+	  uv run python scripts/register_person.py --name "$(name)" \
+	    $(if $(goals),--goals "$(goals)",) \
+	    $(if $(injury),--injury-notes "$(injury)",) \
+	    $(if $(photos),--photos-dir "$(photos)",--skip-face)
+
 ## Setup DB from scratch (run migrations + seed)
 setup-db:
 	@export PATH="$$HOME/.local/bin:$$PATH" && \

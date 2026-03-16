@@ -908,7 +908,7 @@
 
 ## T44: Scripts — Person Registration CLI
 
-- **Status:** `IN_QUEUE`
+- **Status:** `IN_PROGRESS`
 - **Description:** Implement `scripts/register_person.py`. CLI tool that:
   1. Accepts `--name`, `--goals` (comma-separated), `--injury-notes` (optional)
   2. Captures 5 face photos from a connected camera (or accepts `--photos-dir` with existing images)
