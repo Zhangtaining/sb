@@ -179,6 +179,37 @@ CAMERA_CAM_01_RTSP_URL=rtsp://localhost:8554/webcam
 3. Set `CAMERA_CAM_01_RTSP_URL=rtsp://192.168.1.50:8554/live` in `.env`
 4. Make sure iPhone and Mac are on the same WiFi
 
+**Using Raspberry Pi with Camera Module (recommended for permanent install):**
+```bash
+# On the Pi — install mediamtx (RTSP server)
+wget https://github.com/bluenviron/mediamtx/releases/latest/download/mediamtx_v1.9.3_linux_arm64v8.tar.gz
+tar -xzf mediamtx_*.tar.gz && sudo mv mediamtx /usr/local/bin/
+
+# Start mediamtx in background
+mediamtx &
+
+# Stream camera (Pi OS Bookworm/Bullseye — use rpicam-vid)
+rpicam-vid -t 0 --inline --listen -o - | \
+  ffmpeg -re -i - -c:v copy -f rtsp rtsp://localhost:8554/camera
+
+# Stream camera (older Pi OS — use raspivid)
+# raspivid -o - -t 0 -w 1280 -h 720 -fps 15 | \
+#   ffmpeg -re -i - -c:v copy -f rtsp rtsp://localhost:8554/camera
+```
+
+From your Mac, verify the stream:
+```bash
+ffplay rtsp://PI_IP_ADDRESS:8554/camera
+```
+
+Then register and configure:
+```bash
+make register-camera id=cam-01 url=rtsp://PI_IP_ADDRESS:8554/camera zone=weights
+# In .env: CAMERA_CAM_01_RTSP_URL=rtsp://PI_IP_ADDRESS:8554/camera
+```
+
+> Find your Pi's IP with `hostname -I` on the Pi. Mac and Pi must be on the same WiFi.
+
 ---
 
 ## Updating the Code

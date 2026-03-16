@@ -85,6 +85,11 @@ class Person(Base):
         JSONB, default=dict, nullable=False,
         comment="List of OSNet 256-d embeddings from different appearances",
     )
+    goals: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, default=list, nullable=False,
+        comment="List of goal strings e.g. ['strength', 'weight_loss']",
+    )
+    injury_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     notification_token: Mapped[str | None] = mapped_column(String(512), nullable=True)
     websocket_session_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     preferences: Mapped[dict[str, Any]] = mapped_column(
@@ -190,6 +195,10 @@ class GymSession(Base):
     primary_track_ids: Mapped[list[str]] = mapped_column(
         JSONB, default=list, nullable=False,
         comment="UUIDs of all Tracks across cameras for this session",
+    )
+    workout_plan: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONB, nullable=True,
+        comment="AI-recommended workout plan accepted at session onboarding",
     )
 
     person: Mapped[Person | None] = relationship("Person", back_populates="sessions")

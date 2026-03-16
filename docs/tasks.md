@@ -849,3 +849,445 @@
 - [ ] Speak guidance text plays through headphones
 - [ ] Movement Replay tab shows video clips from the session
 - [ ] Stats tab shows session duration, exercise sets, and form scores
+
+---
+
+# Phase 2 Tasks — Person Identification & Personalized Experience
+
+> Phase 2 Goal: Link anonymous tracks to registered gym members. AI greets users by name, asks what they want to work on, recommends a personalized workout plan, provides coaching using their history and goals, and supports voice + text conversation mid-workout.
+
+> **After completing every task:** run all verification checks → `git status` → `git add <files>` → commit with `feat(<scope>): <desc>\n\nTask: #[ID]` → `git push origin main` → update status to `COMPLETE` → append to `docs/progress.md`.
+
+---
+
+## T42: Shared Package — Phase 2 ORM Models
+
+- **Status:** `IN_PROGRESS`
+- **Description:** Add Phase 2 SQLAlchemy 2.0 async ORM models to `shared/src/gym_shared/db/models.py`:
+  - `Person` — registered gym member; fields: `id`, `name`, `face_embedding` (Vector 512), `reid_gallery` (array of Vector 256), `goals` (JSONB), `injury_notes` (text), `fcm_token`, `notification_prefs` (JSONB), `created_at`
+  - `Conversation` — one LLM chat thread per person per session; fields: `id`, `person_id` (FK), `gym_session_id` (FK), `created_at`
+  - `Message` — individual message in a conversation; fields: `id`, `conversation_id` (FK), `role` (enum: user/assistant), `content` (text), `created_at`
+  - `GymKnowledge` — RAG document store; fields: `id`, `title`, `content`, `embedding` (Vector 384), `category`, `created_at`
+  - Add `workout_plan` (JSONB, nullable) column to existing `GymSession` model
+- **Why:** All Phase 2 services depend on these models. Must exist before migrations.
+- **Expected Results:** All new models importable from `gym_shared.db.models`. Relationships defined (Conversation → Person, Message → Conversation, etc.).
+- **Verification:**
+  - [ ] `from gym_shared.db.models import Person, Conversation, Message, GymKnowledge` succeeds
+  - [ ] `Person.face_embedding` uses `Vector(512)`, `GymKnowledge.embedding` uses `Vector(384)`
+  - [ ] `GymSession` has `workout_plan` column
+- **After Completion:**
+  - [ ] All verification checks above pass
+  - [ ] `git status` — confirm only intended files changed
+  - [ ] `git add <specific files>` → commit: `feat(shared): add Phase 2 ORM models (Person, Conversation, Message, GymKnowledge)\n\nTask: #T42`
+  - [ ] `git push origin main`
+  - [ ] Set status to `COMPLETE`, append entry to `docs/progress.md`
+- **Dependencies:** T04
+
+---
+
+## T43: Shared Package — Alembic Migration for Phase 2 Tables
+
+- **Status:** `IN_PROGRESS`
+- **Description:** Write Alembic migration that: creates `persons`, `conversations`, `messages`, `gym_knowledge` tables; adds `workout_plan` JSONB column to `gym_sessions`; creates pgvector indexes (`ivfflat`) on `persons.face_embedding` and `gym_knowledge.embedding` for fast cosine similarity search.
+- **Why:** DB schema must exist before any Phase 2 service can persist or query data.
+- **Expected Results:** `make migrate` runs cleanly. All new tables exist. Vector indexes created.
+- **Verification:**
+  - [ ] `make migrate` exits 0 on a DB that has Phase 1 schema
+  - [ ] `\d persons` in psql shows all columns including `face_embedding vector(512)`
+  - [ ] `\d gym_knowledge` shows `embedding vector(384)`
+  - [ ] `SELECT indexname FROM pg_indexes WHERE tablename = 'persons'` includes the ivfflat index
+  - [ ] Re-running migration is idempotent
+- **After Completion:**
+  - [ ] All verification checks above pass
+  - [ ] `git add <specific files>` → commit: `feat(shared): add Phase 2 Alembic migration\n\nTask: #T43`
+  - [ ] `git push origin main`
+  - [ ] Set status to `COMPLETE`, append entry to `docs/progress.md`
+- **Dependencies:** T42
+
+---
+
+## T44: Scripts — Person Registration CLI
+
+- **Status:** `IN_QUEUE`
+- **Description:** Implement `scripts/register_person.py`. CLI tool that:
+  1. Accepts `--name`, `--goals` (comma-separated), `--injury-notes` (optional)
+  2. Captures 5 face photos from a connected camera (or accepts `--photos-dir` with existing images)
+  3. Extracts ArcFace 512-d face embedding via InsightFace
+  4. Prompts the person to walk in front of each registered camera to seed 10-frame OSNet ReID gallery
+  5. Inserts `Person` record into DB
+  6. Generates and saves a QR code PNG (`output/person_{id}_qr.png`) encoding the person's `track_id` for fallback login
+- **Why:** Required to register gym members so they can be identified by the system.
+- **Expected Results:** Running the script creates a `Person` row with populated face embedding and ReID gallery. QR code PNG generated.
+- **Verification:**
+  - [ ] `python scripts/register_person.py --name "Test User" --goals "strength,weight_loss"` creates a DB row
+  - [ ] `SELECT face_embedding IS NOT NULL FROM persons WHERE name = 'Test User'` returns true
+  - [ ] QR code PNG file is created and scannable
+  - [ ] Running twice with same name creates a second person (not an upsert)
+- **After Completion:**
+  - [ ] All verification checks above pass
+  - [ ] `git add <specific files>` → commit: `feat(scripts): add person registration CLI\n\nTask: #T44`
+  - [ ] `git push origin main`
+  - [ ] Set status to `COMPLETE`, append entry to `docs/progress.md`
+- **Dependencies:** T43
+- **Notes:** InsightFace: `pip install insightface onnxruntime`. Use `app = insightface.app.FaceAnalysis()`, `app.prepare(ctx_id=0)`. ArcFace embedding from `face.embedding` (512-d, L2-normalize before storing).
+
+---
+
+## T45: ReID Service — Scaffold (pyproject.toml, Dockerfile, Config)
+
+- **Status:** `IN_QUEUE`
+- **Description:** Create `services/reid/` service scaffold: `pyproject.toml` (depends on `gym_shared`, `insightface`, `torchreid`, `onnxruntime`, `pgvector`), `Dockerfile` (CPU, Python 3.11 slim), `src/reid/config.py` (similarity thresholds, gallery cache TTL), `src/reid/main.py` stub.
+- **Why:** Scaffold must exist before implementing matching logic.
+- **Expected Results:** `docker compose build reid` succeeds. Service starts and logs "ReID service starting".
+- **Verification:**
+  - [ ] `docker compose build reid` exits 0
+  - [ ] `import insightface; import torchreid` succeeds inside the container
+- **After Completion:**
+  - [ ] All verification checks above pass
+  - [ ] `git add <specific files>` → commit: `chore(reid): add service scaffold\n\nTask: #T45`
+  - [ ] `git push origin main`
+  - [ ] Set status to `COMPLETE`, append entry to `docs/progress.md`
+- **Dependencies:** T01, T02, T05
+
+---
+
+## T46: ReID Service — Gallery Manager
+
+- **Status:** `IN_QUEUE`
+- **Description:** Implement `services/reid/src/reid/gallery_manager.py`. Methods:
+  - `upsert_embedding(person_id, reid_embedding)` — adds embedding to `persons.reid_gallery` array in DB
+  - `search_gallery(query_embedding) -> list[tuple[person_id, similarity]]` — pgvector cosine similarity search against all person embeddings, returns top-5 matches
+  - `refresh_cache()` — loads all person embeddings into Redis hash `reid:gallery` for sub-ms in-memory matching
+  - `get_from_cache(query_embedding) -> person_id | None` — cosine similarity against Redis cache, returns match if similarity > threshold (default 0.75)
+- **Why:** Gallery lookups must be fast (< 50ms) to not delay identity resolution. Redis cache enables this.
+- **Expected Results:** `GalleryManager` class. Cache refresh populates Redis. `search_gallery` returns correct person for a test embedding.
+- **Verification:**
+  - [ ] Unit test: insert a known embedding, search with identical embedding → similarity ≈ 1.0, correct person_id returned
+  - [ ] Unit test: search with random embedding → no match above threshold
+  - [ ] Redis cache populated after `refresh_cache()` — `redis-cli HLEN reid:gallery` > 0
+- **After Completion:**
+  - [ ] All verification checks above pass
+  - [ ] `git add <specific files>` → commit: `feat(reid): add gallery manager with pgvector and Redis cache\n\nTask: #T46`
+  - [ ] `git push origin main`
+  - [ ] Set status to `COMPLETE`, append entry to `docs/progress.md`
+- **Dependencies:** T45, T43
+
+---
+
+## T47: ReID Service — Identity Matcher (OSNet + ArcFace Fusion)
+
+- **Status:** `IN_QUEUE`
+- **Description:** Implement `services/reid/src/reid/matcher.py`. `IdentityMatcher` class:
+  - Maintains a per-track embedding buffer (last 10 OSNet embeddings, averaged)
+  - `update(track_id, reid_embedding, face_crop=None) -> person_id | None`
+    - Averages last 10 embeddings for the track
+    - Queries gallery cache; if cosine similarity > 0.75 → candidate match
+    - If face crop provided + ArcFace similarity > 0.85 → ground-truth override (higher confidence)
+    - Applies spatial-temporal gating: boost score if track appears near a camera boundary within 10s of another track exiting
+  - `clear_track(track_id)` — removes track buffer on track loss
+- **Why:** This is the core identity resolution logic. Fusing appearance (OSNet) and face (ArcFace) maximizes accuracy in a gym environment where clothing is similar.
+- **Expected Results:** `IdentityMatcher` correctly identifies a registered person from their ReID embeddings with >80% accuracy on test data.
+- **Verification:**
+  - [ ] Unit test: 10 embeddings from a registered person → correct `person_id` returned
+  - [ ] Unit test: unknown person embeddings → returns `None`
+  - [ ] Face crop override: low OSNet similarity + high ArcFace similarity → still resolves correctly
+- **After Completion:**
+  - [ ] All verification checks above pass
+  - [ ] `git add <specific files>` → commit: `feat(reid): add OSNet+ArcFace identity matcher\n\nTask: #T47`
+  - [ ] `git push origin main`
+  - [ ] Set status to `COMPLETE`, append entry to `docs/progress.md`
+- **Dependencies:** T46
+
+---
+
+## T48: ReID Service — Identity Resolver (Stream Consumer + Publisher)
+
+- **Status:** `IN_QUEUE`
+- **Description:** Wire up `services/reid/src/reid/main.py`. Consumes `perceptions:{camera_id}` Redis Stream. For each perception event:
+  1. Passes `reid_embedding` (and face crop if visible) to `IdentityMatcher`
+  2. When identity resolved: updates `Track.global_person_id` in DB, publishes `identity_resolved` event to `identity_resolved:{camera_id}` Redis Stream
+  3. Triggers session onboarding if this is a new session for the person (no active `GymSession` in last 4 hours)
+- **Why:** This service closes the loop between anonymous CV tracking and registered person identity.
+- **Expected Results:** With a registered person in front of the camera, `tracks.global_person_id` is populated within ~10 seconds. `identity_resolved` events appear in Redis.
+- **Verification:**
+  - [ ] Integration test: register a person, run pipeline → `tracks.global_person_id` populated
+  - [ ] `redis-cli XRANGE identity_resolved:cam-01 - + COUNT 1` returns a valid event with `person_id`
+  - [ ] Unknown person does not populate `global_person_id` (remains NULL)
+- **After Completion:**
+  - [ ] All verification checks above pass
+  - [ ] `git add <specific files>` → commit: `feat(reid): wire up identity resolver stream consumer\n\nTask: #T48`
+  - [ ] `git push origin main`
+  - [ ] Set status to `COMPLETE`, append entry to `docs/progress.md`
+- **Dependencies:** T47, T06
+
+---
+
+## T49: Guidance Service — Personalized Prompt Builder
+
+- **Status:** `IN_QUEUE`
+- **Description:** Implement `services/guidance/src/guidance/prompt_builder.py`. `PromptBuilder` class:
+  - `build_system_prompt(person_id) -> str` — fetches person's name, goals, injury notes, last 5 sessions summary from DB; constructs a rich system prompt personalizing the AI trainer persona
+  - `build_form_alert_prompt(person, exercise, rep_count, alert_message) -> str` — personalized form correction prompt using person's name and history
+  - `build_onboarding_prompt(person) -> str` — session start prompt: greet by name, reference last workout, ask what they want to focus on today
+- **Why:** Personalized prompts are what differentiate Phase 2 from Phase 1's generic guidance.
+- **Expected Results:** `PromptBuilder` produces prompts that include the person's name, recent history, and goals. Verified by inspecting prompt strings in unit tests.
+- **Verification:**
+  - [ ] Unit test: `build_system_prompt(person_id)` output contains person's name and at least one goal
+  - [ ] Unit test: `build_onboarding_prompt` output references the last session date
+  - [ ] No DB call made if person has no history (graceful fallback to generic prompt)
+- **After Completion:**
+  - [ ] All verification checks above pass
+  - [ ] `git add <specific files>` → commit: `feat(guidance): add personalized prompt builder\n\nTask: #T49`
+  - [ ] `git push origin main`
+  - [ ] Set status to `COMPLETE`, append entry to `docs/progress.md`
+- **Dependencies:** T43, T26
+
+---
+
+## T50: Guidance Service — LLM Tool Definitions + Executor
+
+- **Status:** `IN_QUEUE`
+- **Description:** Implement `services/guidance/src/guidance/tool_definitions.py` and `tool_executor.py`. Tools:
+  - `get_workout_history(person_id, days=7)` — returns list of sessions with exercises, reps, form scores
+  - `get_exercise_stats(person_id, exercise_name)` — returns personal bests, average form score, trend
+  - `suggest_workout_plan(person_id, focus_area, duration_minutes)` — generates a structured workout plan using history + LLM knowledge
+  - `get_person_profile(person_id)` — returns goals, injury notes, experience level
+- **Why:** LLM tools allow the AI to query real user data when answering questions or building recommendations, rather than hallucinating.
+- **Expected Results:** Tools defined in Anthropic tool-use format. `ToolExecutor.run(tool_name, tool_input) -> str` dispatches to correct DB query and returns JSON string result.
+- **Verification:**
+  - [ ] Unit test: `get_workout_history` with seeded DB data returns correct sessions
+  - [ ] Unit test: `suggest_workout_plan` returns a structured plan dict
+  - [ ] Unknown tool name raises `ValueError` with helpful message
+- **After Completion:**
+  - [ ] All verification checks above pass
+  - [ ] `git add <specific files>` → commit: `feat(guidance): add LLM tool definitions and executor\n\nTask: #T50`
+  - [ ] `git push origin main`
+  - [ ] Set status to `COMPLETE`, append entry to `docs/progress.md`
+- **Dependencies:** T49
+
+---
+
+## T51: Guidance Service — Session Onboarding Conversation
+
+- **Status:** `IN_QUEUE`
+- **Description:** Implement `services/guidance/src/guidance/session_onboarding.py`. `SessionOnboardingHandler`:
+  - Triggered by `identity_resolved` events from Redis Stream (new session detected)
+  - Calls `PromptBuilder.build_onboarding_prompt(person)` to greet user and ask about today's goals
+  - Delivers greeting via WebSocket (→ TTS on mobile) within 3 seconds of identity resolution
+  - Maintains a short back-and-forth conversation (up to 3 turns) to clarify the workout plan
+  - Calls `suggest_workout_plan` tool based on user's response
+  - Stores the accepted plan in `GymSession.workout_plan` JSONB field
+  - Publishes `onboarding_complete` event to Redis when plan is accepted
+- **Why:** This is the key Phase 2 feature — the AI proactively engages with the user at session start to set the workout context.
+- **Expected Results:** When a registered person is identified, they receive a personalized greeting within 3 seconds. After 1–3 exchanges, a workout plan is agreed upon and stored.
+- **Verification:**
+  - [ ] Integration test: trigger `identity_resolved` event → guidance message dispatched within 3s
+  - [ ] Simulated user response → AI returns a workout plan
+  - [ ] `gym_sessions.workout_plan` populated after onboarding completes
+- **After Completion:**
+  - [ ] All verification checks above pass
+  - [ ] `git add <specific files>` → commit: `feat(guidance): add session onboarding conversation handler\n\nTask: #T51`
+  - [ ] `git push origin main`
+  - [ ] Set status to `COMPLETE`, append entry to `docs/progress.md`
+- **Dependencies:** T50, T48
+
+---
+
+## T52: Guidance Service — Conversation Manager (Full Chat + RAG)
+
+- **Status:** `IN_QUEUE`
+- **Description:** Implement `services/guidance/src/guidance/conversation_manager.py`. `ConversationManager`:
+  - `send_message(conversation_id, person_id, user_text) -> str` — adds user message to `messages` table, builds context (last 20 messages from Redis, older ones summarized), queries RAG (`GymKnowledge` pgvector search, top-3 chunks injected into system prompt), calls LLM with tools, persists assistant reply, returns text
+  - Context window management: keep last 20 messages in Redis `conv:{conversation_id}:messages`; when count exceeds 20, summarize oldest 10 via LLM and replace with summary
+  - Personal best detection: after each set completion, check if it's a PB; if so, trigger a motivational message
+- **Why:** Enables ongoing mid-workout conversation and follow-up questions beyond the onboarding flow.
+- **Expected Results:** Full conversation roundtrip works end-to-end. RAG context is injected when relevant knowledge exists. Context window stays bounded.
+- **Verification:**
+  - [ ] Integration test: send 3 messages, verify all persisted in DB and Redis
+  - [ ] RAG test: seed a `GymKnowledge` entry about squats, ask about squat form → knowledge chunk appears in LLM context
+  - [ ] Context overflow: send 25 messages → oldest 10 get summarized, Redis list stays at ≤20 entries
+- **After Completion:**
+  - [ ] All verification checks above pass
+  - [ ] `git add <specific files>` → commit: `feat(guidance): add conversation manager with RAG and context management\n\nTask: #T52`
+  - [ ] `git push origin main`
+  - [ ] Set status to `COMPLETE`, append entry to `docs/progress.md`
+- **Dependencies:** T50
+
+---
+
+## T53: API Service — Conversation Endpoints + JWT Auth Upgrade
+
+- **Status:** `IN_QUEUE`
+- **Description:** Two parts:
+  1. Add conversation endpoints to `services/api/src/api/routers/conversations.py`:
+     - `POST /conversations` — create a new conversation for the current person+session
+     - `POST /conversations/{conversation_id}/messages` — send a user message, get AI response
+     - `GET /conversations/{conversation_id}/messages` — fetch message history
+  2. Upgrade `auth.py` from placeholder (token = track_id) to proper JWT: issue a signed JWT on QR scan containing `person_id` + `track_id`; validate signature on all requests. Use `python-jose`.
+- **Why:** The mobile chat screen needs these endpoints. Proper auth is required before Phase 2 goes to any real users.
+- **Expected Results:** Conversation CRUD works. JWT tokens are signed and validated. Existing Phase 1 endpoints still work.
+- **Verification:**
+  - [ ] `POST /conversations/{id}/messages` with a user message returns AI response within 5s
+  - [ ] `GET /conversations/{id}/messages` returns message history in correct order
+  - [ ] Invalid/expired JWT returns 401
+  - [ ] Phase 1 endpoints (`/sessions`, `/tracks`, `/ws/live`) still return correct responses
+- **After Completion:**
+  - [ ] All verification checks above pass
+  - [ ] `git add <specific files>` → commit: `feat(api): add conversation endpoints and proper JWT auth\n\nTask: #T53`
+  - [ ] `git push origin main`
+  - [ ] Set status to `COMPLETE`, append entry to `docs/progress.md`
+- **Dependencies:** T52, T33
+
+---
+
+## T54: Mobile App — Speech-to-Text (Voice Input)
+
+- **Status:** `IN_QUEUE`
+- **Description:** Add voice input capability to the mobile app. Implement `mobile/src/hooks/useSpeechToText.ts` using `@react-native-voice/voice`. Hook exposes: `startListening()`, `stopListening()`, `transcript: string`, `isListening: boolean`. Integrate into a reusable `VoiceInputButton` component that shows a microphone icon, glows while recording, and returns the transcript on stop.
+- **Why:** Users need to be able to speak to the AI during workouts without typing. Core requirement for Phase 2 conversational interface.
+- **Expected Results:** `VoiceInputButton` records speech and returns transcript. Works on iOS with microphone permission.
+- **Verification:**
+  - [ ] Tapping mic button starts recording; tapping again stops and returns transcript
+  - [ ] Microphone permission prompt shown on first use
+  - [ ] Transcript accuracy: simple sentences ("I want to work on legs today") captured correctly
+- **After Completion:**
+  - [ ] All verification checks above pass
+  - [ ] `git add <specific files>` → commit: `feat(mobile): add speech-to-text voice input hook and component\n\nTask: #T54`
+  - [ ] `git push origin main`
+  - [ ] Set status to `COMPLETE`, append entry to `docs/progress.md`
+- **Dependencies:** T34
+- **Notes:** Install: `npm install @react-native-voice/voice` + `pod install`. iOS requires `NSMicrophoneUsageDescription` and `NSSpeechRecognitionUsageDescription` in `Info.plist`.
+
+---
+
+## T55: Mobile App — Session Onboarding + Workout Plan Screen
+
+- **Status:** `IN_QUEUE`
+- **Description:** Implement `mobile/src/screens/OnboardingScreen.tsx`. Shown automatically when a `guidance` WebSocket event of type `onboarding` is received. Displays:
+  - AI greeting message (also spoken via TTS)
+  - Voice input button for user response (uses `VoiceInputButton` from T54)
+  - After plan is generated: a card showing today's recommended workout (exercise list, sets, reps)
+  - "Let's go" button to accept + dismiss, or "Change it" to ask for an alternative (sends another voice message)
+  - Accepted plan stored locally and displayed as a checklist in the Live Coaching tab
+- **Why:** The onboarding conversation is the signature Phase 2 UX. Must be visually clear and voice-first.
+- **Expected Results:** Onboarding screen appears on session start, accepts voice response, displays recommended plan, dismisses on accept.
+- **Verification:**
+  - [ ] Screen appears when `onboarding` WS event received
+  - [ ] Voice input captured and sent to `POST /conversations/{id}/messages`
+  - [ ] Workout plan card renders with correct exercise list from API response
+  - [ ] "Let's go" dismisses screen and shows plan checklist in Live tab
+- **After Completion:**
+  - [ ] All verification checks above pass
+  - [ ] `git add <specific files>` → commit: `feat(mobile): add session onboarding and workout plan screen\n\nTask: #T55`
+  - [ ] `git push origin main`
+  - [ ] Set status to `COMPLETE`, append entry to `docs/progress.md`
+- **Dependencies:** T54, T53, T51
+
+---
+
+## T56: Mobile App — Chat Screen (Voice + Text Mid-Workout)
+
+- **Status:** `IN_QUEUE`
+- **Description:** Implement `mobile/src/screens/ChatScreen.tsx` as a 4th tab ("Coach"). Provides a full conversational interface:
+  - Scrollable message history (user messages right-aligned, AI messages left-aligned)
+  - Text input field + send button for typed messages
+  - `VoiceInputButton` for voice input (transcript auto-fills text input before send)
+  - AI responses displayed as text and spoken via TTS
+  - Loading indicator while waiting for AI response
+- **Why:** Users need to ask questions mid-workout ("how many more sets should I do?", "what's good for sore shoulders?").
+- **Expected Results:** Full chat UI working end-to-end. Voice and text input both work. Responses displayed and spoken.
+- **Verification:**
+  - [ ] Typed message sent → AI response appears within 5s and is spoken via TTS
+  - [ ] Voice message: tap mic → speak → transcript fills input → send → response received
+  - [ ] Message history scrolls correctly with many messages
+  - [ ] Loading spinner shown during API call
+- **After Completion:**
+  - [ ] All verification checks above pass
+  - [ ] `git add <specific files>` → commit: `feat(mobile): add chat screen with voice and text input\n\nTask: #T56`
+  - [ ] `git push origin main`
+  - [ ] Set status to `COMPLETE`, append entry to `docs/progress.md`
+- **Dependencies:** T54, T53
+
+---
+
+## T57: Mobile App — Profile Screen
+
+- **Status:** `IN_QUEUE`
+- **Description:** Implement `mobile/src/screens/ProfileScreen.tsx` as a 5th tab ("Profile"). Displays and allows editing of:
+  - Name
+  - Goals (multi-select: strength, weight loss, endurance, flexibility, muscle gain)
+  - Injury notes (free text)
+  - Notification preferences (form alerts on/off, guidance frequency: always/sometimes/never)
+  - "Sign out" button (clears stored track_id + JWT)
+- **Why:** Users need to set their goals and injury context so the AI can personalize guidance correctly.
+- **Expected Results:** Profile screen loads current data from `GET /persons/{person_id}`. Edits saved via `PATCH /persons/{person_id}`. Changes reflected in next LLM prompt immediately.
+- **Verification:**
+  - [ ] Profile data loads on screen open
+  - [ ] Saving a goal change updates the DB (verify via `SELECT goals FROM persons`)
+  - [ ] Sign out clears session and returns to QR scan screen
+- **After Completion:**
+  - [ ] All verification checks above pass
+  - [ ] `git add <specific files>` → commit: `feat(mobile): add profile screen\n\nTask: #T57`
+  - [ ] `git push origin main`
+  - [ ] Set status to `COMPLETE`, append entry to `docs/progress.md`
+- **Dependencies:** T53
+
+---
+
+## T58: Mobile App — Workout History Screen
+
+- **Status:** `IN_QUEUE`
+- **Description:** Implement `mobile/src/screens/HistoryScreen.tsx`. Displays:
+  - Calendar heatmap (last 90 days, color intensity = total reps that day) using `react-native-calendars`
+  - Tapping a day shows that day's sessions
+  - Each session: expandable card with exercises, sets, rep counts, form score badge
+  - "Personal bests" section at top: best rep count per exercise
+- **Why:** Workout history motivates users and provides context for the AI's workout recommendations.
+- **Expected Results:** History screen loads and displays past sessions from `GET /tracks/{track_id}/history`. Calendar correctly shades active days.
+- **Verification:**
+  - [ ] Calendar shows correct shading for days with workout data
+  - [ ] Tapping a day expands to show session details
+  - [ ] Personal bests section shows correct max rep counts per exercise
+  - [ ] Empty state shown for new users with no history
+- **After Completion:**
+  - [ ] All verification checks above pass
+  - [ ] `git add <specific files>` → commit: `feat(mobile): add workout history screen with calendar heatmap\n\nTask: #T58`
+  - [ ] `git push origin main`
+  - [ ] Set status to `COMPLETE`, append entry to `docs/progress.md`
+- **Dependencies:** T53
+
+---
+
+## T59: Scripts — Seed Gym Knowledge Base (RAG)
+
+- **Status:** `IN_QUEUE`
+- **Description:** Implement `scripts/seed_gym_knowledge.py`. Loads a set of exercise guides (proper form, common mistakes, variations for squat, push-up, bicep curl, lateral raise, deadlift, bench press), safety guidelines, and basic recovery/nutrition notes. For each document: generate a 384-d sentence-transformers embedding and insert into `gym_knowledge` table.
+- **Why:** The RAG retriever needs content to inject into LLM prompts. Without seeded knowledge, the AI has no gym-specific reference material.
+- **Expected Results:** `gym_knowledge` table populated with ≥20 entries. pgvector similarity search returns relevant entries for exercise-related queries.
+- **Verification:**
+  - [ ] Script runs without error and inserts ≥20 rows
+  - [ ] `SELECT COUNT(*) FROM gym_knowledge` ≥ 20
+  - [ ] Similarity search for "knee cave squat" returns a squat form entry (cosine similarity > 0.7)
+- **After Completion:**
+  - [ ] All verification checks above pass
+  - [ ] `git add <specific files>` → commit: `feat(scripts): seed gym knowledge base for RAG\n\nTask: #T59`
+  - [ ] `git push origin main`
+  - [ ] Set status to `COMPLETE`, append entry to `docs/progress.md`
+- **Dependencies:** T43
+- **Notes:** Use `sentence-transformers` model `all-MiniLM-L6-v2` (384-d). Store content as plain text chunks of ~200 words. Include source/category tag (e.g., `"exercise_form"`, `"safety"`, `"nutrition"`).
+
+---
+
+## Phase 2 — End-to-End Verification Checklist
+
+- [ ] `python scripts/register_person.py --name "Test User" --goals "strength"` creates person + QR code
+- [ ] Start all services including new `reid` service
+- [ ] Walk in front of camera — within 10s `tracks.global_person_id` is populated
+- [ ] AI greeting appears on mobile app within 3s of identity resolution, spoken via TTS
+- [ ] Respond via voice — AI generates and displays a workout plan
+- [ ] Accept plan — `gym_sessions.workout_plan` populated, plan checklist shown in Live tab
+- [ ] Trigger a form alert — guidance message uses person's name and references their goals
+- [ ] Open Chat tab, ask "how many sets should I do today?" — AI responds using workout history
+- [ ] Voice input: tap mic, speak a question — transcript captured, AI responds via TTS
+- [ ] Profile screen: update a goal, verify next LLM response reflects the change
+- [ ] History screen: past sessions visible with correct rep counts and form scores

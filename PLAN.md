@@ -182,7 +182,8 @@ Phase 1 scope (minimal):
 - QR code badge scan as fallback identity resolver
 - Cross-camera ReID: OSNet cosine similarity matching against identity gallery
 - Personalized LLM system prompts incorporating member profile and history
-- Full conversation interface in the mobile app (chat with AI trainer)
+- **Session onboarding conversation**: when user starts a session, AI greets them, asks what they want to work on today, and recommends a workout plan based on their history, stated goals, and LLM knowledge
+- Full conversation interface in the mobile app (voice + text chat with AI trainer)
 - Workout history views
 
 #### Steps
@@ -203,22 +204,38 @@ Phase 1 scope (minimal):
 - `tool_definitions.py`: LLM tools — `get_workout_history`, `get_exercise_stats`, `suggest_workout_plan`
 - `tool_executor.py`: executes tool calls against DB/Redis
 
-**2.4 — Conversation Manager (Days 16–28)**
+**2.4 — Session Onboarding Conversation (Days 14–20)**
+- Triggered automatically when identity is resolved at session start
+- LLM greets the user by name and asks: "What do you want to work on today?"
+- Response delivered via TTS on the mobile app; user replies via voice (STT) or text
+- LLM builds a recommended workout plan factoring in:
+  - Recent workout history (days since last session, muscle groups worked)
+  - Stated goals from their profile (strength, weight loss, endurance, etc.)
+  - Their typed/spoken response about today's intent
+  - RAG knowledge base (exercise science, recovery guidelines)
+- Recommended plan displayed on mobile and spoken aloud; user can accept or ask for alternatives
+- Accepted plan stored in `GymSession.workout_plan` JSONB field to track completion during the session
+
+**2.5 — Conversation Manager (Days 16–28)**
 - Full chat endpoint `POST /conversations/{conversation_id}/messages`
+- Voice input via STT (speech-to-text) on mobile — user can speak to the AI mid-workout
 - Context window management: keep last 20 messages in Redis, summarize older ones via LLM
 - RAG: semantic search of `gym_knowledge` table (pgvector), inject top-3 chunks into system prompt
 - LLM encouragement: trigger motivational message when person completes a personal best
 
-**2.5 — Mobile App Enhancement (Days 22–35)**
-- Chat screen: conversational interface with the gym AI
+**2.6 — Mobile App Enhancement (Days 22–35)**
+- Chat screen: conversational interface with the gym AI (voice + text input)
+- Session start screen: displays AI-recommended workout plan with accept/modify options
 - Profile screen: set goals, injury notes, notification preferences
 - History screen: calendar heatmap + exercise breakdown
 
 **Phase 2 Verification**:
 1. Register a test person, verify ReID links correctly across 2+ cameras
-2. Trigger a form alert; verify the guidance uses the person's name and history
-3. Chat with the AI trainer; verify RAG context is used in responses
-4. Verify QR code fallback correctly resolves identity
+2. Start a session — verify AI greets by name and asks about today's goal
+3. Accept a recommended workout plan — verify it's stored and tracked during the session
+4. Trigger a form alert; verify the guidance uses the person's name and history
+5. Ask the AI a question mid-workout via voice; verify it responds via TTS
+6. Verify QR code fallback correctly resolves identity
 
 ---
 
