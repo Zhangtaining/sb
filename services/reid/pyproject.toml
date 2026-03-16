@@ -7,6 +7,13 @@ dependencies = [
     "gym-shared",
     "numpy>=1.26",
     "scipy>=1.13",
+    "insightface>=0.7.3",
+    # onnxruntime is required in Docker (Linux). Install manually for local dev:
+    # pip install onnxruntime  (Linux/Windows/macOS arm64)
+    # pip install onnxruntime==1.16.3  (macOS x86_64 Intel)
+    "onnxruntime>=1.18 ; sys_platform == 'linux'",
+    "pgvector>=0.3",
+    "structlog>=24.1",
 ]
 
 [build-system]

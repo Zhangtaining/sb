@@ -862,7 +862,7 @@
 
 ## T42: Shared Package — Phase 2 ORM Models
 
-- **Status:** `IN_PROGRESS`
+- **Status:** `COMPLETE`
 - **Description:** Add Phase 2 SQLAlchemy 2.0 async ORM models to `shared/src/gym_shared/db/models.py`:
   - `Person` — registered gym member; fields: `id`, `name`, `face_embedding` (Vector 512), `reid_gallery` (array of Vector 256), `goals` (JSONB), `injury_notes` (text), `fcm_token`, `notification_prefs` (JSONB), `created_at`
   - `Conversation` — one LLM chat thread per person per session; fields: `id`, `person_id` (FK), `gym_session_id` (FK), `created_at`
@@ -887,7 +887,7 @@
 
 ## T43: Shared Package — Alembic Migration for Phase 2 Tables
 
-- **Status:** `IN_PROGRESS`
+- **Status:** `COMPLETE`
 - **Description:** Write Alembic migration that: creates `persons`, `conversations`, `messages`, `gym_knowledge` tables; adds `workout_plan` JSONB column to `gym_sessions`; creates pgvector indexes (`ivfflat`) on `persons.face_embedding` and `gym_knowledge.embedding` for fast cosine similarity search.
 - **Why:** DB schema must exist before any Phase 2 service can persist or query data.
 - **Expected Results:** `make migrate` runs cleanly. All new tables exist. Vector indexes created.
@@ -908,7 +908,7 @@
 
 ## T44: Scripts — Person Registration CLI
 
-- **Status:** `IN_PROGRESS`
+- **Status:** `COMPLETE`
 - **Description:** Implement `scripts/register_person.py`. CLI tool that:
   1. Accepts `--name`, `--goals` (comma-separated), `--injury-notes` (optional)
   2. Captures 5 face photos from a connected camera (or accepts `--photos-dir` with existing images)
@@ -935,7 +935,7 @@
 
 ## T45: ReID Service — Scaffold (pyproject.toml, Dockerfile, Config)
 
-- **Status:** `IN_QUEUE`
+- **Status:** `COMPLETE`
 - **Description:** Create `services/reid/` service scaffold: `pyproject.toml` (depends on `gym_shared`, `insightface`, `torchreid`, `onnxruntime`, `pgvector`), `Dockerfile` (CPU, Python 3.11 slim), `src/reid/config.py` (similarity thresholds, gallery cache TTL), `src/reid/main.py` stub.
 - **Why:** Scaffold must exist before implementing matching logic.
 - **Expected Results:** `docker compose build reid` succeeds. Service starts and logs "ReID service starting".
@@ -953,7 +953,7 @@
 
 ## T46: ReID Service — Gallery Manager
 
-- **Status:** `IN_QUEUE`
+- **Status:** `COMPLETE`
 - **Description:** Implement `services/reid/src/reid/gallery_manager.py`. Methods:
   - `upsert_embedding(person_id, reid_embedding)` — adds embedding to `persons.reid_gallery` array in DB
   - `search_gallery(query_embedding) -> list[tuple[person_id, similarity]]` — pgvector cosine similarity search against all person embeddings, returns top-5 matches
@@ -976,7 +976,7 @@
 
 ## T47: ReID Service — Identity Matcher (OSNet + ArcFace Fusion)
 
-- **Status:** `IN_QUEUE`
+- **Status:** `COMPLETE`
 - **Description:** Implement `services/reid/src/reid/matcher.py`. `IdentityMatcher` class:
   - Maintains a per-track embedding buffer (last 10 OSNet embeddings, averaged)
   - `update(track_id, reid_embedding, face_crop=None) -> person_id | None`
@@ -1002,7 +1002,7 @@
 
 ## T48: ReID Service — Identity Resolver (Stream Consumer + Publisher)
 
-- **Status:** `IN_QUEUE`
+- **Status:** `COMPLETE`
 - **Description:** Wire up `services/reid/src/reid/main.py`. Consumes `perceptions:{camera_id}` Redis Stream. For each perception event:
   1. Passes `reid_embedding` (and face crop if visible) to `IdentityMatcher`
   2. When identity resolved: updates `Track.global_person_id` in DB, publishes `identity_resolved` event to `identity_resolved:{camera_id}` Redis Stream
