@@ -332,4 +332,31 @@
 
 **Commits:** 9cabea5, aeedc5a, 3e07e26, 7d52d0b
 
+---
+
+## 2026-03-15 - Tasks T54–T60: Phase 2 Mobile App + Person API
+
+**Summary:** Completed all Phase 2 mobile screens and supporting backend. Added STT voice input, session onboarding modal, full chat interface, profile editor, workout history calendar, and seeded the RAG knowledge base. Also added the missing `GET/PATCH /persons/{id}` API endpoints required by the profile screen.
+
+**Changes:**
+- `mobile/src/hooks/useSpeechToText.ts` — STT hook using @react-native-voice/voice
+- `mobile/src/components/VoiceInputButton.tsx` — mic button with glow animation
+- `mobile/src/hooks/useLiveStream.ts` — added onboardingGreeting state + WS event handling
+- `mobile/src/api/client.ts` — Phase 2 types and conversation API methods
+- `mobile/src/store/session.ts` — personId + conversationId storage
+- `mobile/src/screens/OnboardingScreen.tsx` — session start modal, workout plan proposal
+- `mobile/src/screens/ChatScreen.tsx` — voice + text conversation UI with TTS playback
+- `mobile/src/screens/ProfileScreen.tsx` — goals toggles, injury notes, sign out
+- `mobile/src/screens/HistoryScreen.tsx` — calendar heatmap + personal bests
+- `mobile/src/navigation/AppNavigator.tsx` — 3 new tabs: Coach, History, Profile
+- `mobile/src/screens/LiveCoachingScreen.tsx` — OnboardingScreen modal integration
+- `SmartGym/ios/SmartGym/Info.plist` — microphone + speech recognition permissions
+- `scripts/seed_gym_knowledge.py` — 18 RAG knowledge entries (form, safety, nutrition, programming)
+- `services/api/src/api/routers/persons.py` — GET + PATCH /persons/{id} endpoints
+- `services/api/src/api/main.py` — registered persons router
+
+**Decisions Made:** Created persons router as separate file (T60) — keeps concerns clean. Used sentence-transformers all-MiniLM-L6-v2 for knowledge embeddings (384-d, matches pgvector schema). onnxruntime is Linux-only in reid pyproject.toml to avoid macOS x86_64 incompatibility.
+
+**Context for Next Session:** Phase 2 backend (T42–T53) and mobile (T54–T60) are all COMPLETE. To test end-to-end: run `make dev-up`, register a person with `scripts/register_person.py`, start the reid and guidance services, and use the mobile app. The Wyze Cam V2 with Dafang Hacks firmware was not yet connecting to WiFi — check wpa_supplicant.conf on the SD card or use a Raspberry Pi with rpicam-vid + mediamtx as an alternative.
+
 <!-- Entries will be added here as tasks are completed -->

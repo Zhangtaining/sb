@@ -1142,7 +1142,7 @@
 
 ## T54: Mobile App — Speech-to-Text (Voice Input)
 
-- **Status:** `IN_QUEUE`
+- **Status:** `IN_PROGRESS`
 - **Description:** Add voice input capability to the mobile app. Implement `mobile/src/hooks/useSpeechToText.ts` using `@react-native-voice/voice`. Hook exposes: `startListening()`, `stopListening()`, `transcript: string`, `isListening: boolean`. Integrate into a reusable `VoiceInputButton` component that shows a microphone icon, glows while recording, and returns the transcript on stop.
 - **Why:** Users need to be able to speak to the AI during workouts without typing. Core requirement for Phase 2 conversational interface.
 - **Expected Results:** `VoiceInputButton` records speech and returns transcript. Works on iOS with microphone permission.
@@ -1275,6 +1275,24 @@
   - [ ] Set status to `COMPLETE`, append entry to `docs/progress.md`
 - **Dependencies:** T43
 - **Notes:** Use `sentence-transformers` model `all-MiniLM-L6-v2` (384-d). Store content as plain text chunks of ~200 words. Include source/category tag (e.g., `"exercise_form"`, `"safety"`, `"nutrition"`).
+
+---
+
+## T60: API — Person Profile Endpoints (GET + PATCH)
+
+- **Status:** `COMPLETE`
+- **Description:** Add `GET /persons/{id}` and `PATCH /persons/{id}` to the FastAPI gateway. `GET` returns name, goals, injury_notes, member_since. `PATCH` updates goals and injury_notes.
+- **Why:** ProfileScreen calls these endpoints to load and save user profile data.
+- **Expected Results:** `GET /persons/{id}` returns person profile JSON. `PATCH /persons/{id}` updates goals/injury_notes and returns updated profile.
+- **Verification:**
+  - [x] `GET /persons/{id}` returns 200 with correct fields
+  - [x] `PATCH /persons/{id}` updates fields and returns updated profile
+  - [x] 404 returned for unknown person_id
+- **After Completion:**
+  - [x] All verification checks above pass
+  - [x] Committed with T54-T59 batch
+- **Dependencies:** T42
+- **Notes:** Router at `services/api/src/api/routers/persons.py`.
 
 ---
 
