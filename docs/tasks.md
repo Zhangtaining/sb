@@ -1142,7 +1142,7 @@
 
 ## T54: Mobile App — Speech-to-Text (Voice Input)
 
-- **Status:** `IN_PROGRESS`
+- **Status:** `COMPLETE`
 - **Description:** Add voice input capability to the mobile app. Implement `mobile/src/hooks/useSpeechToText.ts` using `@react-native-voice/voice`. Hook exposes: `startListening()`, `stopListening()`, `transcript: string`, `isListening: boolean`. Integrate into a reusable `VoiceInputButton` component that shows a microphone icon, glows while recording, and returns the transcript on stop.
 - **Why:** Users need to be able to speak to the AI during workouts without typing. Core requirement for Phase 2 conversational interface.
 - **Expected Results:** `VoiceInputButton` records speech and returns transcript. Works on iOS with microphone permission.
@@ -1162,7 +1162,7 @@
 
 ## T55: Mobile App — Session Onboarding + Workout Plan Screen
 
-- **Status:** `IN_QUEUE`
+- **Status:** `COMPLETE`
 - **Description:** Implement `mobile/src/screens/OnboardingScreen.tsx`. Shown automatically when a `guidance` WebSocket event of type `onboarding` is received. Displays:
   - AI greeting message (also spoken via TTS)
   - Voice input button for user response (uses `VoiceInputButton` from T54)
@@ -1187,7 +1187,7 @@
 
 ## T56: Mobile App — Chat Screen (Voice + Text Mid-Workout)
 
-- **Status:** `IN_QUEUE`
+- **Status:** `COMPLETE`
 - **Description:** Implement `mobile/src/screens/ChatScreen.tsx` as a 4th tab ("Coach"). Provides a full conversational interface:
   - Scrollable message history (user messages right-aligned, AI messages left-aligned)
   - Text input field + send button for typed messages
@@ -1212,7 +1212,7 @@
 
 ## T57: Mobile App — Profile Screen
 
-- **Status:** `IN_QUEUE`
+- **Status:** `COMPLETE`
 - **Description:** Implement `mobile/src/screens/ProfileScreen.tsx` as a 5th tab ("Profile"). Displays and allows editing of:
   - Name
   - Goals (multi-select: strength, weight loss, endurance, flexibility, muscle gain)
@@ -1236,7 +1236,7 @@
 
 ## T58: Mobile App — Workout History Screen
 
-- **Status:** `IN_QUEUE`
+- **Status:** `COMPLETE`
 - **Description:** Implement `mobile/src/screens/HistoryScreen.tsx`. Displays:
   - Calendar heatmap (last 90 days, color intensity = total reps that day) using `react-native-calendars`
   - Tapping a day shows that day's sessions
@@ -1260,7 +1260,7 @@
 
 ## T59: Scripts — Seed Gym Knowledge Base (RAG)
 
-- **Status:** `IN_QUEUE`
+- **Status:** `COMPLETE`
 - **Description:** Implement `scripts/seed_gym_knowledge.py`. Loads a set of exercise guides (proper form, common mistakes, variations for squat, push-up, bicep curl, lateral raise, deadlift, bench press), safety guidelines, and basic recovery/nutrition notes. For each document: generate a 384-d sentence-transformers embedding and insert into `gym_knowledge` table.
 - **Why:** The RAG retriever needs content to inject into LLM prompts. Without seeded knowledge, the AI has no gym-specific reference material.
 - **Expected Results:** `gym_knowledge` table populated with ≥20 entries. pgvector similarity search returns relevant entries for exercise-related queries.
