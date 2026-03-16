@@ -40,6 +40,7 @@ from exercise.config import ExerciseConfig
 from exercise.exercise_registry import ExerciseRegistry
 from exercise.form_analyzer import FormAnalyzer
 from exercise.rep_counter import RepCounter
+from exercise.rest_timer import RestTimerTracker
 
 log = get_logger(__name__)
 
@@ -91,9 +92,11 @@ class ExercisePipeline:
         self._frame_count = 0
         self._t_start = time.monotonic()
         self._redis: aioredis.Redis | None = None  # set in run()
+        self._rest_timer: RestTimerTracker | None = None  # set in run()
 
     async def run(self, redis: aioredis.Redis) -> None:
         self._redis = redis
+        self._rest_timer = RestTimerTracker(self._camera_id, redis)
         await ensure_consumer_group(redis, self._in_stream, GROUP_EXERCISE)
         log.info(
             "exercise_pipeline_starting",
@@ -153,6 +156,10 @@ class ExercisePipeline:
         # Run rep counter
         rep_event = rep_counter.update(track_id, angle, event.timestamp_ns)
         if rep_event is not None:
+            # End any ongoing rest timer on first rep of a new set
+            if self._rest_timer and self._rest_timer.is_resting(track_id):
+                await self._rest_timer.end_rest(track_id, event.timestamp_ns)
+
             rep_event = RepCountedEvent(
                 camera_id=self._camera_id,
                 track_id=rep_event.track_id,
@@ -172,6 +179,7 @@ class ExercisePipeline:
                 track_id=track_id,
                 exercise=exercise_name,
                 rep=rep_event.rep_number,
+                duration_ms=rep_event.duration_ms,
             )
 
         # Run form analyzer
@@ -350,9 +358,11 @@ class ExercisePipeline:
             duration_ms=duration_ms,
         )
 
-        # Reset for next set
+        # Reset for next set and start rest timer
         rep_counter.reset_track(track_id)
         self._cleanup_track(track_id)
+        if self._rest_timer:
+            self._rest_timer.start_rest(track_id, set_id)
 
     def _cleanup_track(self, track_id: int) -> None:
         """Remove in-memory per-track state after set finalization."""
