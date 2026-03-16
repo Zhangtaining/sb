@@ -300,4 +300,36 @@
 
 **Commit:** 0169363
 
+## 2026-03-15 - T42–T53: Phase 2 Backend — ReID + Personalized Guidance + Conversation API
+
+**Summary:** Implemented the full Phase 2 backend in one session. The system can now identify registered gym members, greet them by name at session start, recommend a personalized workout plan, and support mid-workout voice/text chat with the AI trainer via REST endpoints.
+
+**Changes:**
+- `shared/src/gym_shared/db/models.py` — added `goals`, `injury_notes` to Person; `workout_plan` to GymSession
+- `shared/.../migrations/versions/a1b2c3d4e5f6_phase2_person_session_columns.py` — Phase 2 migration + ivfflat vector indexes
+- `scripts/register_person.py` — CLI to register members (face enrollment + QR code)
+- `services/reid/` — full ReID service: gallery_manager, matcher (OSNet+ArcFace), identity_resolver
+- `services/guidance/src/guidance/prompt_builder.py` — personalized prompts using name, goals, history
+- `services/guidance/src/guidance/tool_definitions.py` — 4 LLM tools (history, stats, plan, profile)
+- `services/guidance/src/guidance/tool_executor.py` — async DB tool execution
+- `services/guidance/src/guidance/session_onboarding.py` — session-start greeting + workout plan conversation
+- `services/guidance/src/guidance/conversation_manager.py` — full chat with Redis context, RAG, tool use
+- `services/api/src/api/routers/conversations.py` — POST /conversations, POST/GET /conversations/{id}/messages
+- `services/api/src/api/schemas/__init__.py` — conversation/message schemas
+- `Makefile` — added `register-person` target
+
+**Decisions Made:**
+- ReID service tracks `{camera_id}:{local_track_id}` as buffer keys (integer ByteTrack IDs from events)
+- Conversation manager uses Redis list for hot context (20 msgs) + LLM summarization on overflow
+- onnxruntime pinned to Linux-only in pyproject.toml (Mac x86_64 incompatibility); service runs in Docker
+- API depends on gym-guidance workspace package so conversation router can call ConversationManager directly
+
+**Context for Next Session:**
+- T54–T58: mobile app screens (voice input, onboarding screen, chat screen, profile, history)
+- T59: seed gym knowledge base (RAG content)
+- To test backend: `make dev-up` → `make migrate` → `python scripts/register_person.py --name "Test" --skip-face` → call `POST /conversations` → `POST /conversations/{id}/messages`
+- Remaining tasks in this session: mobile STT hook, onboarding screen, chat screen, profile, history
+
+**Commits:** 9cabea5, aeedc5a, 3e07e26, 7d52d0b
+
 <!-- Entries will be added here as tasks are completed -->
