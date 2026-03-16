@@ -1296,6 +1296,165 @@
 
 ---
 
+## T61: Exercise — Set Completion Detection + Finalization
+
+- **Status:** `IN_QUEUE`
+- **Description:** Detect when a set has ended (no reps for `set_idle_timeout_s`, default 20s) and publish a `set_complete` event. Finalize the `ExerciseSet` DB row: set `ended_at`, `rep_count`, and `form_score` (average of per-rep form scores collected during the set). Add `SetCompleteEvent` to `shared/src/gym_shared/events/schemas.py`. Publish to `set_complete` Redis stream.
+- **Why:** Downstream handlers (weight advice, encouragement) need to know a set is done. Currently `ExerciseSet.ended_at` and `rep_count` are never written.
+- **Expected Results:** `set_complete` stream receives an event within 20s of the last rep. `ExerciseSet` row in DB has correct `ended_at`, `rep_count`, and `form_score`.
+- **Verification:**
+  - [ ] Do 10 reps, stop — `SetCompleteEvent` appears on `set_complete` stream within 25s
+  - [ ] `SELECT ended_at, rep_count FROM exercise_sets WHERE id = ?` returns non-null values
+  - [ ] `SetCompleteEvent` has correct `rep_count`, `avg_form_score`, `duration_ms` fields
+- **After Completion:**
+  - [ ] All verification checks above pass
+  - [ ] Run `make test`
+  - [ ] `git add <specific files>` → commit: `feat(exercise): set completion detection and DB finalization\n\nTask: #T61`
+  - [ ] `git push origin main`
+  - [ ] Set status to `COMPLETE`, append entry to `docs/progress.md`
+- **Dependencies:** T16 (rep counter)
+- **Notes:** Add a `_finalize_set()` method to `ExercisePipeline`. Call it from idle-timeout path in `RepCounter._get_or_create()`. Track per-rep form scores in `TrackState` (average of FormAnalyzer scores). New schema: `SetCompleteEvent(camera_id, track_id, exercise_set_id, exercise_type, rep_count, avg_form_score, duration_ms, timestamp_ns)`.
+
+---
+
+## T62: Exercise — Rep Duration Tracking
+
+- **Status:** `IN_QUEUE`
+- **Description:** Fix the `duration_ms=0` TODO in `rep_counter.py`. Record the timestamp when a rep starts (DOWN phase begins) and compute actual duration when the rep completes (UP phase confirmed). Store duration per rep in `RepEvent.duration_ms`. Also compute average rep cadence (reps/minute) and include it in `RepCountedEvent`.
+- **Why:** Rep duration tells the user if they are lifting too fast (momentum-based) or at a healthy tempo. It's also useful for TUT (time under tension) tracking.
+- **Expected Results:** `RepEvent.duration_ms` has realistic values (e.g. 1500–3000ms for a squat). `RepCountedEvent.duration_ms` is non-zero.
+- **Verification:**
+  - [ ] Do 5 slow reps (~3s each) — `RepEvent.duration_ms` values are in range 2500–4000
+  - [ ] Do 5 fast reps (~1s each) — `RepEvent.duration_ms` values are in range 700–1500
+  - [ ] `RepCountedEvent` carries correct `duration_ms`
+- **After Completion:**
+  - [ ] All verification checks above pass
+  - [ ] Run `make test`
+  - [ ] `git add <specific files>` → commit: `fix(exercise): track rep duration and fix duration_ms=0\n\nTask: #T62`
+  - [ ] `git push origin main`
+  - [ ] Set status to `COMPLETE`, append entry to `docs/progress.md`
+- **Dependencies:** T61
+- **Notes:** Add `rep_start_ns: int | None` to `TrackState`. Set it when phase transitions to DOWN. Compute `(timestamp_ns - rep_start_ns) / 1_000_000` on DOWN→UP. Reset `rep_start_ns = None` after.
+
+---
+
+## T63: Exercise — Rest Timer Between Sets
+
+- **Status:** `IN_QUEUE`
+- **Description:** After a `set_complete` event, start a rest timer for that track. Publish `RestTimerEvent` updates every 30 seconds with elapsed rest time. When the next set starts (first rep detected), publish a final `RestTimerEvent(finished=True)` with total rest duration. Store rest duration in `ExerciseSet.metadata_` JSONB field (`{"rest_after_s": 90}`).
+- **Why:** Rest duration is a key training variable. Too short = incomplete recovery; too long = workout drags. The guidance service uses this to give rest advice.
+- **Expected Results:** After a set, `RestTimerEvent` events fire at 30s intervals. When next set starts, final event fires with `finished=True` and total `rest_s`.
+- **Verification:**
+  - [ ] Finish a set, wait 65s, start another — events at ~30s and ~60s appear in stream, then final event on first rep of next set
+  - [ ] `exercise_sets.metadata_` contains `rest_after_s` for completed sets
+- **After Completion:**
+  - [ ] All verification checks above pass
+  - [ ] Run `make test`
+  - [ ] `git add <specific files>` → commit: `feat(exercise): rest timer tracking between sets\n\nTask: #T63`
+  - [ ] `git push origin main`
+  - [ ] Set status to `COMPLETE`, append entry to `docs/progress.md`
+- **Dependencies:** T61
+- **Notes:** Add `RestTimerEvent(camera_id, track_id, exercise_set_id, rest_s, finished, timestamp_ns)` to schemas. Implement `RestTimerTracker` in `services/exercise/src/exercise/rest_timer.py`. Run rest timer updates in a background asyncio task spawned in `ExercisePipeline`. Stream name: `rest_timer`.
+
+---
+
+## T64: Guidance — Post-Set Coaching (Weight Progression Advice)
+
+- **Status:** `IN_QUEUE`
+- **Description:** Add `set_complete_handler.py` to the guidance service. Consumes the `set_complete` stream. Uses form score + rep count relative to the exercise's target rep range to generate a weight advice message:
+  - **Increase weight**: form_score ≥ 0.85 AND rep_count ≥ top of target range
+  - **Decrease weight**: form_score < 0.60 OR rep_count < bottom of target range - 2
+  - **Maintain**: everything else
+  Calls LLM to generate a 1–2 sentence personalized message using the advice direction. Falls back to a template if LLM is unavailable. Dispatches via WebSocket.
+- **Why:** Progressive overload is the core strength training principle. Automated weight advice closes the feedback loop: the system not only detects what went wrong but tells users when to level up.
+- **Expected Results:** After completing a set with good form, user receives a message like "Excellent set — 12 clean reps at great form. Consider bumping the weight by 5 lbs next set." After a rough set: "Form broke down after rep 6 — hold this weight and focus on control before adding load."
+- **Verification:**
+  - [ ] High form (0.9) + high reps (12, target 8–12) → "increase weight" message delivered to WS
+  - [ ] Low form (0.5) → "decrease weight / maintain form" message delivered
+  - [ ] Mid range → neutral/encouraging message
+  - [ ] Message appears in mobile coaching log
+- **After Completion:**
+  - [ ] All verification checks above pass
+  - [ ] Run `make test`
+  - [ ] `git add <specific files>` → commit: `feat(guidance): post-set weight progression advice handler\n\nTask: #T64`
+  - [ ] `git push origin main`
+  - [ ] Set status to `COMPLETE`, append entry to `docs/progress.md`
+- **Dependencies:** T61, T26 (LLM client), T27 (prompt builder)
+- **Notes:** Add target rep ranges to `exercises.yaml` (e.g. `target_rep_range: [8, 12]`). `SetCompleteHandler` is structured like `FormAlertHandler` — consumes stream, rate-limits per track, calls LLM, dispatches. Use `prompt_builder.build_set_complete_prompt(exercise_type, rep_count, form_score, advice_direction, person_name)`.
+
+---
+
+## T65: Guidance — Rep Milestone Encouragement + Personal Best Detection
+
+- **Status:** `IN_QUEUE`
+- **Description:** Add encouragement triggers to the guidance service:
+  1. **Rep milestones**: every 5th rep (5, 10, 15…) fire a short LLM encouragement ("10 reps — you're halfway there, keep the form tight!"). Use a template for speed (no LLM call for every milestone; reserve LLM for round numbers: 10, 20, 25).
+  2. **Personal best**: after set completion, query the person's history — if `rep_count` exceeds their previous best for this exercise, fire a celebration message ("New personal best — 15 squats! That's 2 more than your previous record.").
+  3. **Session warmup done**: when the first set of a session completes, send a brief "Warm-up done, let's get to work!" message.
+- **Why:** Encouragement is a proven motivational tool. Milestone messages keep users engaged during a set; personal bests provide the dopamine hit that keeps them coming back.
+- **Expected Results:** Rep milestone messages arrive during sets at every 5th rep. Personal best messages fire after a set where a PB is achieved.
+- **Verification:**
+  - [ ] Do 10 reps — milestone messages at rep 5 and rep 10
+  - [ ] Exceed personal best — celebration message fires after set_complete
+  - [ ] Messages appear in mobile coaching log and are spoken via TTS
+- **After Completion:**
+  - [ ] All verification checks above pass
+  - [ ] Run `make test`
+  - [ ] `git add <specific files>` → commit: `feat(guidance): rep milestone encouragement and personal best detection\n\nTask: #T65`
+  - [ ] `git push origin main`
+  - [ ] Set status to `COMPLETE`, append entry to `docs/progress.md`
+- **Dependencies:** T62, T64
+- **Notes:** Subscribe to `rep_counted` stream. Maintain `{track_id: last_milestone}` dict. For personal best: query `MAX(rep_count) FROM exercise_sets WHERE exercise_type = ? AND session_id IN (SELECT id FROM gym_sessions WHERE person_id = ?)`. Personal best logic runs in `SetCompleteHandler` after the weight advice message (T64).
+
+---
+
+## T66: Guidance — Rest Timer Advice
+
+- **Status:** `IN_QUEUE`
+- **Description:** Add a `rest_timer_handler.py` to the guidance service. Consumes the `rest_timer` stream. When `rest_s >= 120` (2 minutes): send a gentle nudge ("You've been resting 2 minutes — ready when you are!"). When rest ends (`finished=True`) and `rest_s < 60`: warn about insufficient recovery for strength work ("You only rested 45 seconds — for strength sets, 2–3 minutes improves performance."). Use exercise type and rep range to determine the appropriate rest recommendation (strength: 3–5 min; hypertrophy: 60–90s; endurance: 30–60s).
+- **Why:** Most users don't time their rest periods. Too short limits performance; too long wastes time. This closes the feedback loop on the third key training variable (alongside reps and weight).
+- **Expected Results:** After 2+ minutes rest, user receives a gentle nudge. After a very short rest (<60s) going into a strength exercise, user receives a warning.
+- **Verification:**
+  - [ ] Rest 130s → nudge arrives at ~120s mark
+  - [ ] Rest 40s between strength sets → "too short" advisory arrives after next set starts
+  - [ ] Rest 90s between hypertrophy sets → no advisory (correct rest for the range)
+  - [ ] Messages appear in mobile coaching log
+- **After Completion:**
+  - [ ] All verification checks above pass
+  - [ ] Run `make test`
+  - [ ] `git add <specific files>` → commit: `feat(guidance): rest timer advice handler\n\nTask: #T66`
+  - [ ] `git push origin main`
+  - [ ] Set status to `COMPLETE`, append entry to `docs/progress.md`
+- **Dependencies:** T63, T64
+- **Notes:** Add `optimal_rest_range_s` to `exercises.yaml` (e.g. `[180, 300]` for strength squat, `[60, 90]` for hypertrophy curls). Rate-limit: max 1 advisory per rest period per track. Template messages preferred over LLM for speed (rest nudge doesn't need personalisation).
+
+---
+
+## T67: Mobile — Rest Timer UI + Set Completion Card
+
+- **Status:** `IN_QUEUE`
+- **Description:** Update `LiveCoachingScreen` to display:
+  1. **Set completion card**: appears after `set_complete` WS event. Shows exercise name, rep count, form score badge (green ≥0.85 / yellow ≥0.65 / red <0.65), and avg rep duration. Auto-dismisses after 8 seconds or on tap.
+  2. **Rest timer**: while resting, shows a live countdown/count-up ("REST  1:23") in the stats card area. Updates every second from a local `setInterval`. Stops when next `rep_counted` event arrives.
+  3. **Workout progress checklist**: if a workout plan was accepted in OnboardingScreen, show a checklist of planned exercises with sets × reps. Check off each set as `set_complete` events arrive.
+  4. New WS event types handled in `useLiveStream`: `set_complete`, `rest_started`, `rest_update`.
+- **Why:** Visual rest timer and set summary give users clear feedback after each set — the most important moment for coaching.
+- **Expected Results:** After finishing a set, card appears with stats. Rest timer counts up. Card auto-dismisses. Workout checklist shows progress.
+- **Verification:**
+  - [ ] Complete a set → summary card shows correct reps and form badge colour
+  - [ ] Rest timer counts up in 1s increments after set complete
+  - [ ] Timer stops when first rep of next set fires
+  - [ ] Checklist items check off as sets complete
+- **After Completion:**
+  - [ ] All verification checks above pass
+  - [ ] `git add <specific files>` → commit: `feat(mobile): rest timer UI and set completion card\n\nTask: #T67`
+  - [ ] `git push origin main`
+  - [ ] Set status to `COMPLETE`, append entry to `docs/progress.md`
+- **Dependencies:** T61, T63, T66
+- **Notes:** Rest timer is purely client-side (count-up from `set_complete` event time, stop on next `rep_counted`). No server sync needed. `set_complete` WS event payload: `{type: "set_complete", data: {exercise_type, rep_count, avg_form_score, duration_ms}}`. `rest_update` payload: `{type: "rest_update", data: {rest_s}}`.
+
+---
+
 ## Phase 2 — End-to-End Verification Checklist
 
 - [ ] `python scripts/register_person.py --name "Test User" --goals "strength"` creates person + QR code
