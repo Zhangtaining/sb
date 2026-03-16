@@ -359,4 +359,30 @@
 
 **Context for Next Session:** Phase 2 backend (T42–T53) and mobile (T54–T60) are all COMPLETE. To test end-to-end: run `make dev-up`, register a person with `scripts/register_person.py`, start the reid and guidance services, and use the mobile app. The Wyze Cam V2 with Dafang Hacks firmware was not yet connecting to WiFi — check wpa_supplicant.conf on the SD card or use a Raspberry Pi with rpicam-vid + mediamtx as an alternative.
 
+---
+
+## 2026-03-15 - Tasks T61–T67: Enriched AI Guidance (Set Completion, Rest Timer, Weight Advice, Encouragement)
+
+**Summary:** Implemented the full enriched guidance loop. The system now detects when a set ends, tracks rest time between sets, and delivers weight progression advice, rep milestone encouragement, personal best celebrations, and rest duration advice. The mobile Live tab shows a set summary card, live rest count-up timer, and workout plan checklist.
+
+**Changes:**
+- `shared/src/gym_shared/events/schemas.py` — SetCompleteEvent + RestTimerEvent schemas
+- `services/exercise/data/exercises.yaml` — added target_rep_range + optimal_rest_range_s per exercise
+- `services/exercise/src/exercise/exercise_registry.py` — parse new YAML fields
+- `services/exercise/src/exercise/rep_counter.py` — rep duration tracking (T62), last_rep_at/set_start_ns fields
+- `services/exercise/src/exercise/pipeline.py` — _finalize_set(), _idle_checker() background task, alert counting, rest timer wiring
+- `services/exercise/src/exercise/rest_timer.py` — RestTimerTracker (T63)
+- `services/guidance/src/guidance/prompt_builder.py` — build_set_complete_prompt, build_milestone_prompt
+- `services/guidance/src/guidance/set_complete_handler.py` — weight advice after each set (T64)
+- `services/guidance/src/guidance/rep_milestone_handler.py` — every-5th-rep encouragement + PB detection (T65)
+- `services/guidance/src/guidance/rest_timer_handler.py` — nudge at 2min, warn on short rest (T66)
+- `services/guidance/src/guidance/main.py` — all handlers wired with asyncio.gather
+- `services/api/src/api/websocket_manager.py` — set_complete + rest_timer streams added
+- `mobile/src/hooks/useLiveStream.ts` — set_complete + rest_update WS event handling
+- `mobile/src/screens/LiveCoachingScreen.tsx` — SetCompleteCard, rest count-up timer, WorkoutChecklist (T67)
+
+**Decisions Made:** Idle checker runs every 5s (not per-frame) to avoid overhead. Form score computed as `1.0 - (alert_count * 0.15 / rep_count)` — simple and tunable. Rest nudge uses templates (no LLM) for speed since rest advice is time-sensitive. PB detection compares against historical MAX(rep_count) per person + exercise.
+
+**Context for Next Session:** T61–T67 all COMPLETE. T61–T66 are backend; T67 is mobile. All 15 exercise service tests pass. Next milestone is Phase 3 (camera calibration, floor-plan homography, TCN exercise classifier) or testing Phase 2 end-to-end with a real camera. Wyze Cam V2 WiFi issue was unresolved — consider using a Raspberry Pi or USB webcam as an alternative to get the pipeline running.
+
 <!-- Entries will be added here as tasks are completed -->

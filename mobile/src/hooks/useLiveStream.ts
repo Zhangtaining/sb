@@ -7,6 +7,13 @@ import {createLiveSocket, WsMessage} from '../api/client';
 
 const RECONNECT_DELAY_MS = 5000;
 
+export interface SetSummary {
+  exerciseType: string;
+  repCount: number;
+  avgFormScore: number;
+  durationMs: number;
+}
+
 interface LiveStreamState {
   connected: boolean;
   repCount: number;
@@ -14,6 +21,8 @@ interface LiveStreamState {
   lastGuidance: string | null;
   lastAlert: string | null;
   onboardingGreeting: string | null;
+  lastSetSummary: SetSummary | null;
+  restS: number | null; // seconds currently resting, null = not resting
 }
 
 export function useLiveStream(trackId: string | null) {
@@ -26,6 +35,8 @@ export function useLiveStream(trackId: string | null) {
     lastGuidance: null,
     lastAlert: null,
     onboardingGreeting: null,
+    lastSetSummary: null,
+    restS: null,
   });
 
   const connect = useCallback(() => {
@@ -40,6 +51,8 @@ export function useLiveStream(trackId: string | null) {
             ...s,
             repCount: (msg.data.rep_count as number) ?? s.repCount,
             exerciseType: (msg.data.exercise_type as string) ?? s.exerciseType,
+            // Clear rest timer when reps start
+            restS: null,
           }));
         } else if (msg.type === 'form_alert') {
           setState(s => ({
@@ -55,6 +68,23 @@ export function useLiveStream(trackId: string | null) {
           setState(s => ({
             ...s,
             onboardingGreeting: msg.data.message as string,
+          }));
+        } else if (msg.type === 'set_complete') {
+          setState(s => ({
+            ...s,
+            lastSetSummary: {
+              exerciseType: msg.data.exercise_type as string,
+              repCount: msg.data.rep_count as number,
+              avgFormScore: msg.data.avg_form_score as number,
+              durationMs: msg.data.duration_ms as number,
+            },
+            repCount: 0, // reset for next set
+          }));
+        } else if (msg.type === 'rest_update') {
+          const finished = msg.data.finished as boolean;
+          setState(s => ({
+            ...s,
+            restS: finished ? null : (msg.data.rest_s as number),
           }));
         }
       },

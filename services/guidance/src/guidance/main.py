@@ -13,6 +13,10 @@ from guidance.config import build_config
 from guidance.form_alert_handler import FormAlertHandler
 from guidance.llm_client import GymLLMClient
 from guidance.notification_dispatcher import NotificationDispatcher
+from guidance.prompt_builder import PromptBuilder
+from guidance.rep_milestone_handler import RepMilestoneHandler
+from guidance.rest_timer_handler import RestTimerHandler
+from guidance.set_complete_handler import SetCompleteHandler
 
 log = get_logger(__name__)
 
@@ -31,10 +35,16 @@ async def run() -> None:
     redis = aioredis.from_url(config.redis_url, decode_responses=False)
 
     llm = GymLLMClient(config)
+    pb = PromptBuilder()
 
     # One dispatcher per camera (guidance stream is global, not per-camera)
-    dispatcher = NotificationDispatcher(redis, camera_id=config.camera_ids[0] if config.camera_ids else "unknown")
-    handler = FormAlertHandler(config, llm, dispatcher)
+    camera_id = config.camera_ids[0] if config.camera_ids else "unknown"
+    dispatcher = NotificationDispatcher(redis, camera_id=camera_id)
+
+    form_handler = FormAlertHandler(config, llm, dispatcher)
+    set_complete_handler = SetCompleteHandler(config, llm, dispatcher, pb)
+    milestone_handler = RepMilestoneHandler(config, llm, dispatcher, pb)
+    rest_handler = RestTimerHandler(config, dispatcher)
 
     loop = asyncio.get_running_loop()
 
@@ -47,7 +57,14 @@ async def run() -> None:
     signal.signal(signal.SIGINT, _shutdown)
 
     try:
-        await handler.run(redis)
+        await asyncio.gather(
+            form_handler.run(redis),
+            set_complete_handler.run(redis),
+            milestone_handler.run_rep_stream(redis),
+            milestone_handler.run_set_stream(redis),
+            rest_handler.run(redis),
+            return_exceptions=True,
+        )
     except asyncio.CancelledError:
         pass
     finally:

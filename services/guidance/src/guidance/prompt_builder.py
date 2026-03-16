@@ -101,6 +101,70 @@ class PromptBuilder:
             "Give a short (1–2 sentence) correction cue, as if speaking aloud through their earpiece."
         )
 
+    async def build_set_complete_prompt(
+        self,
+        db: AsyncSession,
+        person_id: uuid.UUID | None,
+        exercise: str,
+        rep_count: int,
+        avg_form_score: float,
+        advice_direction: str,  # "increase" | "decrease" | "maintain"
+        target_rep_range: tuple[int, int],
+    ) -> str:
+        """Post-set prompt for weight progression advice."""
+        from gym_shared.db.models import Person
+
+        if person_id:
+            person = await db.get(Person, person_id)
+            name = person.display_name if person else "there"
+        else:
+            name = "there"
+
+        form_pct = int(avg_form_score * 100)
+        return (
+            f"{_TRAINER_PERSONA}\n\n"
+            f"The person you're coaching (call them '{name}') just finished a set of "
+            f"{exercise}: {rep_count} reps with {form_pct}% form quality. "
+            f"Target rep range: {target_rep_range[0]}–{target_rep_range[1]}. "
+            f"Based on their performance, the recommendation is to {advice_direction} the weight. "
+            "Give a short (1–2 sentence) post-set message: acknowledge their effort, then give the "
+            "weight recommendation with a specific reason. Be direct and motivating."
+        )
+
+    async def build_milestone_prompt(
+        self,
+        db: AsyncSession,
+        person_id: uuid.UUID | None,
+        exercise: str,
+        rep_count: int,
+        is_personal_best: bool = False,
+        previous_best: int | None = None,
+    ) -> str:
+        """Encouragement prompt for rep milestones and personal bests."""
+        from gym_shared.db.models import Person
+
+        if person_id:
+            person = await db.get(Person, person_id)
+            name = person.display_name if person else "there"
+        else:
+            name = "there"
+
+        if is_personal_best and previous_best:
+            context = (
+                f"'{name}' just achieved a new personal best: {rep_count} reps of {exercise} "
+                f"(previous best was {previous_best}). "
+                "Celebrate this achievement with genuine excitement — mention the exact numbers. "
+                "Keep it to 1–2 sentences."
+            )
+        else:
+            context = (
+                f"'{name}' just completed rep {rep_count} of {exercise}. "
+                "Give a short (1 sentence) mid-set encouragement. "
+                "Be energetic. Vary the language — don't always say 'great job'."
+            )
+
+        return f"{_TRAINER_PERSONA}\n\n{context}"
+
     async def build_onboarding_prompt(
         self, db: AsyncSession, person_id: uuid.UUID
     ) -> str:

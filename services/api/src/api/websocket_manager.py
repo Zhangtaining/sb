@@ -12,13 +12,15 @@ from gym_shared.logging import get_logger
 log = get_logger(__name__)
 
 # Redis streams the manager subscribes to
-_STREAMS = ["rep_counted", "form_alerts", "guidance"]
+_STREAMS = ["rep_counted", "form_alerts", "guidance", "set_complete", "rest_timer"]
 
 # How to map a Redis stream message to the event type field sent over WS
 _STREAM_TYPE_MAP = {
     "rep_counted": "rep_counted",
     "form_alerts": "form_alert",
     "guidance": "guidance",
+    "set_complete": "set_complete",
+    "rest_timer": "rest_update",
 }
 
 

@@ -1298,7 +1298,7 @@
 
 ## T61: Exercise — Set Completion Detection + Finalization
 
-- **Status:** `IN_QUEUE`
+- **Status:** `COMPLETE`
 - **Description:** Detect when a set has ended (no reps for `set_idle_timeout_s`, default 20s) and publish a `set_complete` event. Finalize the `ExerciseSet` DB row: set `ended_at`, `rep_count`, and `form_score` (average of per-rep form scores collected during the set). Add `SetCompleteEvent` to `shared/src/gym_shared/events/schemas.py`. Publish to `set_complete` Redis stream.
 - **Why:** Downstream handlers (weight advice, encouragement) need to know a set is done. Currently `ExerciseSet.ended_at` and `rep_count` are never written.
 - **Expected Results:** `set_complete` stream receives an event within 20s of the last rep. `ExerciseSet` row in DB has correct `ended_at`, `rep_count`, and `form_score`.
@@ -1319,7 +1319,7 @@
 
 ## T62: Exercise — Rep Duration Tracking
 
-- **Status:** `IN_QUEUE`
+- **Status:** `COMPLETE`
 - **Description:** Fix the `duration_ms=0` TODO in `rep_counter.py`. Record the timestamp when a rep starts (DOWN phase begins) and compute actual duration when the rep completes (UP phase confirmed). Store duration per rep in `RepEvent.duration_ms`. Also compute average rep cadence (reps/minute) and include it in `RepCountedEvent`.
 - **Why:** Rep duration tells the user if they are lifting too fast (momentum-based) or at a healthy tempo. It's also useful for TUT (time under tension) tracking.
 - **Expected Results:** `RepEvent.duration_ms` has realistic values (e.g. 1500–3000ms for a squat). `RepCountedEvent.duration_ms` is non-zero.
@@ -1340,7 +1340,7 @@
 
 ## T63: Exercise — Rest Timer Between Sets
 
-- **Status:** `IN_QUEUE`
+- **Status:** `COMPLETE`
 - **Description:** After a `set_complete` event, start a rest timer for that track. Publish `RestTimerEvent` updates every 30 seconds with elapsed rest time. When the next set starts (first rep detected), publish a final `RestTimerEvent(finished=True)` with total rest duration. Store rest duration in `ExerciseSet.metadata_` JSONB field (`{"rest_after_s": 90}`).
 - **Why:** Rest duration is a key training variable. Too short = incomplete recovery; too long = workout drags. The guidance service uses this to give rest advice.
 - **Expected Results:** After a set, `RestTimerEvent` events fire at 30s intervals. When next set starts, final event fires with `finished=True` and total `rest_s`.
@@ -1360,7 +1360,7 @@
 
 ## T64: Guidance — Post-Set Coaching (Weight Progression Advice)
 
-- **Status:** `IN_QUEUE`
+- **Status:** `COMPLETE`
 - **Description:** Add `set_complete_handler.py` to the guidance service. Consumes the `set_complete` stream. Uses form score + rep count relative to the exercise's target rep range to generate a weight advice message:
   - **Increase weight**: form_score ≥ 0.85 AND rep_count ≥ top of target range
   - **Decrease weight**: form_score < 0.60 OR rep_count < bottom of target range - 2
@@ -1386,7 +1386,7 @@
 
 ## T65: Guidance — Rep Milestone Encouragement + Personal Best Detection
 
-- **Status:** `IN_QUEUE`
+- **Status:** `COMPLETE`
 - **Description:** Add encouragement triggers to the guidance service:
   1. **Rep milestones**: every 5th rep (5, 10, 15…) fire a short LLM encouragement ("10 reps — you're halfway there, keep the form tight!"). Use a template for speed (no LLM call for every milestone; reserve LLM for round numbers: 10, 20, 25).
   2. **Personal best**: after set completion, query the person's history — if `rep_count` exceeds their previous best for this exercise, fire a celebration message ("New personal best — 15 squats! That's 2 more than your previous record.").
@@ -1410,7 +1410,7 @@
 
 ## T66: Guidance — Rest Timer Advice
 
-- **Status:** `IN_QUEUE`
+- **Status:** `COMPLETE`
 - **Description:** Add a `rest_timer_handler.py` to the guidance service. Consumes the `rest_timer` stream. When `rest_s >= 120` (2 minutes): send a gentle nudge ("You've been resting 2 minutes — ready when you are!"). When rest ends (`finished=True`) and `rest_s < 60`: warn about insufficient recovery for strength work ("You only rested 45 seconds — for strength sets, 2–3 minutes improves performance."). Use exercise type and rep range to determine the appropriate rest recommendation (strength: 3–5 min; hypertrophy: 60–90s; endurance: 30–60s).
 - **Why:** Most users don't time their rest periods. Too short limits performance; too long wastes time. This closes the feedback loop on the third key training variable (alongside reps and weight).
 - **Expected Results:** After 2+ minutes rest, user receives a gentle nudge. After a very short rest (<60s) going into a strength exercise, user receives a warning.
@@ -1432,7 +1432,7 @@
 
 ## T67: Mobile — Rest Timer UI + Set Completion Card
 
-- **Status:** `IN_QUEUE`
+- **Status:** `COMPLETE`
 - **Description:** Update `LiveCoachingScreen` to display:
   1. **Set completion card**: appears after `set_complete` WS event. Shows exercise name, rep count, form score badge (green ≥0.85 / yellow ≥0.65 / red <0.65), and avg rep duration. Auto-dismisses after 8 seconds or on tap.
   2. **Rest timer**: while resting, shows a live countdown/count-up ("REST  1:23") in the stats card area. Updates every second from a local `setInterval`. Stops when next `rep_counted` event arrives.
