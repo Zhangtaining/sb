@@ -29,6 +29,8 @@ class ExerciseDefinition:
     up_angle: float
     down_angle: float
     form_checks: tuple[FormCheck, ...]
+    target_rep_range: tuple[int, int] = (8, 12)       # [min, max] target reps per set
+    optimal_rest_range_s: tuple[int, int] = (60, 120)  # [min, max] rest seconds
 
 
 class ExerciseRegistry:
@@ -61,6 +63,8 @@ class ExerciseRegistry:
                 up_angle=float(entry["up_angle"]),
                 down_angle=float(entry["down_angle"]),
                 form_checks=checks,
+                target_rep_range=tuple(entry.get("target_rep_range", [8, 12])),
+                optimal_rest_range_s=tuple(entry.get("optimal_rest_range_s", [60, 120])),
             )
 
     def get_exercise(self, name: str) -> ExerciseDefinition:

@@ -113,6 +113,39 @@ class FormAlertEvent(_FrozenModel):
     timestamp_ns: int
 
 
+# ── Exercise → Guidance (set-level events) ───────────────────────────────────
+
+class SetCompleteEvent(_FrozenModel):
+    """Fired when a set ends (inactivity timeout after reps stop).
+
+    Stream: set_complete
+    """
+
+    camera_id: str
+    track_id: int
+    exercise_set_id: str
+    exercise_type: str
+    rep_count: int
+    avg_form_score: float = Field(description="0.0–1.0; 1.0 = no form alerts during set")
+    duration_ms: int = Field(description="Total set duration from first to last rep, ms")
+    timestamp_ns: int
+
+
+class RestTimerEvent(_FrozenModel):
+    """Periodic rest timer update between sets.
+
+    Published every 30s after a set_complete. Final event has finished=True.
+    Stream: rest_timer
+    """
+
+    camera_id: str
+    track_id: int
+    exercise_set_id: str  # the set that just completed
+    rest_s: int = Field(description="Seconds elapsed since set completed")
+    finished: bool = Field(default=False, description="True when next set starts")
+    timestamp_ns: int
+
+
 # ── Guidance → API / Mobile ───────────────────────────────────────────────────
 
 class GuidanceMessage(_FrozenModel):

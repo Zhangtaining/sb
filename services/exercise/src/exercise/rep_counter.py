@@ -38,6 +38,10 @@ class TrackState:
     angle_history: deque = field(default_factory=lambda: deque(maxlen=_ANGLE_HISTORY))
     phase_frame_count: int = 0   # consecutive frames in candidate phase
     last_seen_at: float = field(default_factory=time.monotonic)
+    last_rep_at: float = field(default_factory=time.monotonic)
+    set_start_ns: int = 0        # timestamp_ns of the first DOWN phase (set start)
+    last_rep_ns: int = 0         # timestamp_ns of the most recently completed rep
+    rep_start_ns: int | None = None  # timestamp_ns when current DOWN phase began
 
 
 class RepCounter:
@@ -114,16 +118,32 @@ class RepCounter:
         state.phase = candidate
         state.phase_frame_count = 0
 
+        # Record when DOWN phase begins (rep start)
+        if candidate == Phase.DOWN:
+            state.rep_start_ns = timestamp_ns
+            if state.set_start_ns == 0:
+                state.set_start_ns = timestamp_ns
+
         # Rep counted on DOWN → UP transition
         if prev_phase == Phase.DOWN and candidate == Phase.UP:
             state.rep_count += 1
             rep_number = state.rep_count
+            state.last_rep_at = now
+            state.last_rep_ns = timestamp_ns
+
+            # Compute rep duration from DOWN phase start
+            duration_ms = 0
+            if state.rep_start_ns is not None and state.rep_start_ns > 0:
+                duration_ms = (timestamp_ns - state.rep_start_ns) // 1_000_000
+            state.rep_start_ns = None
+
             log.debug(
                 "rep_counted",
                 track_id=track_id,
                 exercise=self._def.name,
                 rep=rep_number,
                 angle=round(smoothed, 1),
+                duration_ms=duration_ms,
             )
             return RepCountedEvent(
                 camera_id="",  # filled in by caller who knows camera_id
@@ -132,26 +152,29 @@ class RepCounter:
                 exercise_type=self._def.name,
                 rep_number=rep_number,
                 rep_count=rep_number,
-                duration_ms=0,  # TODO: track rep start time
+                duration_ms=duration_ms,
                 phase=candidate.value,
                 timestamp_ns=timestamp_ns,
             )
         return None
 
+    def get_state(self, track_id: int) -> TrackState | None:
+        """Return raw state for a track (used by pipeline for finalization)."""
+        return self._tracks.get(track_id)
+
+    def is_idle(self, track_id: int, idle_timeout_s: float) -> bool:
+        """True if the track has not received any frames within idle_timeout_s."""
+        state = self._tracks.get(track_id)
+        if state is None:
+            return False
+        return (time.monotonic() - state.last_seen_at) > idle_timeout_s
+
+    def reset_track(self, track_id: int) -> TrackState | None:
+        """Remove and return the current state for a track (called after finalization)."""
+        return self._tracks.pop(track_id, None)
+
     def _get_or_create(self, track_id: int) -> TrackState:
-        now = time.monotonic()
-        if track_id in self._tracks:
-            state = self._tracks[track_id]
-            # Reset set if track was idle too long (person left and came back)
-            if now - state.last_seen_at > self._idle_timeout:
-                log.info(
-                    "new_set_started",
-                    track_id=track_id,
-                    reason="idle_timeout",
-                    prev_reps=state.rep_count,
-                )
-                self._tracks[track_id] = TrackState(exercise_type=self._def.name)
-        else:
+        if track_id not in self._tracks:
             self._tracks[track_id] = TrackState(exercise_type=self._def.name)
         return self._tracks[track_id]
 
@@ -159,4 +182,8 @@ class RepCounter:
         return self._get_or_create(track_id).set_id
 
     def get_rep_count(self, track_id: int) -> int:
-        return self._tracks.get(track_id, TrackState(exercise_type=self._def.name)).rep_count
+        state = self._tracks.get(track_id)
+        return state.rep_count if state else 0
+
+    def active_track_ids(self) -> list[int]:
+        return list(self._tracks.keys())

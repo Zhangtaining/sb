@@ -27,7 +27,12 @@ from gym_shared.events.publisher import (
     publish,
     read_group,
 )
-from gym_shared.events.schemas import FormAlertEvent, PerceptionEvent, RepCountedEvent
+from gym_shared.events.schemas import (
+    FormAlertEvent,
+    PerceptionEvent,
+    RepCountedEvent,
+    SetCompleteEvent,
+)
 from gym_shared.logging import get_logger
 
 from exercise.classifier import HeuristicClassifier
@@ -40,6 +45,8 @@ log = get_logger(__name__)
 
 _STREAM_REP_COUNTED = "rep_counted"
 _STREAM_FORM_ALERTS = "form_alerts"
+_STREAM_SET_COMPLETE = "set_complete"
+_IDLE_CHECK_INTERVAL_S = 5.0   # how often to scan for idle tracks
 
 
 class ExercisePipeline:
@@ -78,17 +85,24 @@ class ExercisePipeline:
         self._track_set_ids: dict[int, str] = {}
         # track_id → active GymSession UUID (str)
         self._track_session_ids: dict[int, str] = {}
+        # track_id → count of form alerts fired during current set
+        self._track_alert_count: dict[int, int] = defaultdict(int)
 
         self._frame_count = 0
         self._t_start = time.monotonic()
+        self._redis: aioredis.Redis | None = None  # set in run()
 
     async def run(self, redis: aioredis.Redis) -> None:
+        self._redis = redis
         await ensure_consumer_group(redis, self._in_stream, GROUP_EXERCISE)
         log.info(
             "exercise_pipeline_starting",
             camera_id=self._camera_id,
             stream=self._in_stream,
         )
+        # Background task: finalize sets that have gone idle
+        asyncio.create_task(self._idle_checker())
+
         while True:
             messages = await read_group(
                 redis,
@@ -169,6 +183,7 @@ class ExercisePipeline:
             timestamp_ns=event.timestamp_ns,
         )
         for alert in alerts:
+            self._track_alert_count[track_id] += 1
             filled_alert = FormAlertEvent(
                 camera_id=self._camera_id,
                 track_id=alert.track_id,
@@ -267,3 +282,100 @@ class ExercisePipeline:
                 phase=event.phase,
             )
             db.add(rep)
+
+    async def _finalize_set(self, track_id: int, exercise_name: str) -> None:
+        """Finalize a set after idle timeout: update DB, publish set_complete event."""
+        set_id = self._track_set_ids.get(track_id)
+        if not set_id:
+            return
+
+        rep_counter = self._rep_counters.get(exercise_name)
+        if rep_counter is None:
+            return
+
+        state = rep_counter.get_state(track_id)
+        if state is None or state.rep_count == 0:
+            # Nothing to finalize — clean up silently
+            rep_counter.reset_track(track_id)
+            self._cleanup_track(track_id)
+            return
+
+        rep_count = state.rep_count
+        alert_count = self._track_alert_count.get(track_id, 0)
+        # Form score: 1.0 = no alerts; each alert deducts 0.15, min 0.0
+        avg_form_score = max(0.0, 1.0 - (alert_count * 0.15 / max(1, rep_count)))
+        duration_ms = 0
+        if state.set_start_ns > 0 and state.last_rep_ns > 0:
+            duration_ms = (state.last_rep_ns - state.set_start_ns) // 1_000_000
+
+        now = datetime.now(timezone.utc)
+        timestamp_ns = int(now.timestamp() * 1e9)
+
+        # Update ExerciseSet in DB
+        from sqlalchemy import select
+        async with get_db() as db:
+            from sqlalchemy import update
+            await db.execute(
+                update(ExerciseSet)
+                .where(ExerciseSet.id == uuid.UUID(set_id))
+                .values(
+                    ended_at=now,
+                    rep_count=rep_count,
+                    form_score=avg_form_score,
+                )
+            )
+            await db.commit()
+
+        # Publish set_complete event
+        event = SetCompleteEvent(
+            camera_id=self._camera_id,
+            track_id=track_id,
+            exercise_set_id=set_id,
+            exercise_type=exercise_name,
+            rep_count=rep_count,
+            avg_form_score=round(avg_form_score, 3),
+            duration_ms=duration_ms,
+            timestamp_ns=timestamp_ns,
+        )
+        if self._redis is not None:
+            await publish(self._redis, _STREAM_SET_COMPLETE, event)
+
+        log.info(
+            "set_complete",
+            camera_id=self._camera_id,
+            track_id=track_id,
+            exercise=exercise_name,
+            rep_count=rep_count,
+            form_score=round(avg_form_score, 3),
+            duration_ms=duration_ms,
+        )
+
+        # Reset for next set
+        rep_counter.reset_track(track_id)
+        self._cleanup_track(track_id)
+
+    def _cleanup_track(self, track_id: int) -> None:
+        """Remove in-memory per-track state after set finalization."""
+        self._track_exercise.pop(track_id, None)
+        self._track_db_ids.pop(track_id, None)
+        self._track_set_ids.pop(track_id, None)
+        self._track_session_ids.pop(track_id, None)
+        self._track_alert_count.pop(track_id, None)
+
+    async def _idle_checker(self) -> None:
+        """Background task: periodically finalize sets that have gone idle."""
+        while True:
+            await asyncio.sleep(_IDLE_CHECK_INTERVAL_S)
+            try:
+                for exercise_name, rep_counter in self._rep_counters.items():
+                    for track_id in list(rep_counter.active_track_ids()):
+                        if rep_counter.is_idle(track_id, self._cfg.set_idle_timeout_s):
+                            log.info(
+                                "set_idle_timeout",
+                                camera_id=self._camera_id,
+                                track_id=track_id,
+                                exercise=exercise_name,
+                            )
+                            await self._finalize_set(track_id, exercise_name)
+            except Exception as exc:
+                log.error("idle_checker_error", error=str(exc))
