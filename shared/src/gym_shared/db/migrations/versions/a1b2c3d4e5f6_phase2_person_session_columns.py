@@ -26,7 +26,7 @@ def upgrade() -> None:
     # ── persons: add goals + injury_notes ─────────────────────────────────────
     op.add_column(
         "persons",
-        sa.Column("goals", JSONB, nullable=False, server_default="'[]'::jsonb"),
+        sa.Column("goals", JSONB, nullable=False, server_default=sa.text("'[]'::jsonb")),
     )
     op.add_column(
         "persons",

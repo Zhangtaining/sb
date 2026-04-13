@@ -20,8 +20,8 @@ exercises:
     name: squat
     # Angle at the knee: hip(11) – knee(13) – ankle(15), left side
     primary_joint: [11, 13, 15]
-    up_angle: 160      # standing upright — knee nearly straight
-    down_angle: 100    # parallel depth — knee at ~90-100°
+    up_angle: 150      # standing (relaxed from 160)
+    down_angle: 115    # squat depth (relaxed from 100 — accept above-parallel)
     target_rep_range: [8, 12]
     optimal_rest_range_s: [90, 180]
     form_checks:
@@ -54,8 +54,8 @@ exercises:
     name: push_up
     # Angle at the elbow: shoulder(5) – elbow(7) – wrist(9), left side
     primary_joint: [5, 7, 9]
-    up_angle: 155      # arms extended
-    down_angle: 80     # chest near floor
+    up_angle: 140      # arms extended (relaxed from 155)
+    down_angle: 95     # chest lowered (relaxed from 80)
     target_rep_range: [8, 15]
     optimal_rest_range_s: [60, 120]
     form_checks:
@@ -80,8 +80,8 @@ exercises:
     name: bicep_curl
     # Angle at the elbow: shoulder(5) – elbow(7) – wrist(9), left side
     primary_joint: [5, 7, 9]
-    up_angle: 50       # fully curled
-    down_angle: 155    # arm extended
+    up_angle: 70       # curled (relaxed from 50 — don't require full peak contraction)
+    down_angle: 130    # arm lowered (relaxed from 155 — don't require full extension)
     target_rep_range: [10, 15]
     optimal_rest_range_s: [60, 90]
     form_checks:

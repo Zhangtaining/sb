@@ -37,4 +37,4 @@ async def ws_live(track_id: str, websocket: WebSocket) -> None:
     except WebSocketDisconnect:
         pass
     finally:
-        await manager.disconnect(track_id)
+        await manager.disconnect(track_id, websocket)

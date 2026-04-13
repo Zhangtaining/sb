@@ -78,3 +78,9 @@ class ChatResponse(BaseModel):
     conversation_id: uuid.UUID
     user_message: str
     assistant_response: str
+
+
+class TrackStatusResponse(BaseModel):
+    track_id: uuid.UUID
+    camera_online: bool   # camera is running and sending frames
+    user_visible: bool    # this track was actively detected in the last 10s

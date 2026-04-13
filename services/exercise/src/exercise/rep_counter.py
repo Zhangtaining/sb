@@ -19,8 +19,8 @@ from exercise.keypoint_utils import smooth_signal
 
 log = get_logger(__name__)
 
-_ANGLE_HISTORY = 7     # frames of history for median filter
-_PHASE_LOCK = 3        # frames an angle must stay in a zone before phase change
+_ANGLE_HISTORY = 3     # frames of history for median filter (less lag = faster response)
+_PHASE_LOCK = 1        # frames an angle must stay in a zone before phase change (1 = immediate)
 
 
 class Phase(str, Enum):

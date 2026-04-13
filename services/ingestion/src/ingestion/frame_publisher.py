@@ -69,6 +69,9 @@ class FramePublisher:
 
                 try:
                     msg_id = await publish(redis, self._stream, event, maxlen=100)
+                    # Heartbeat: lets the API know this camera is live
+                    if raw.frame_seq % 30 == 0:
+                        await redis.set(f"camera_alive:{raw.camera_id}", "1", ex=10)
                     # Maintain rolling buffer for video clip worker
                     await redis.rpush(self._buffer_key, raw.jpeg_bytes)
                     await redis.ltrim(self._buffer_key, -self._cfg.frame_buffer_size, -1)

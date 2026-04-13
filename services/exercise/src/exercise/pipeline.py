@@ -127,20 +127,69 @@ class ExercisePipeline:
                     )
                     await ack(redis, self._in_stream, GROUP_EXERCISE, msg_id)
 
+    def _resolve_exercise_hint(self, hint: str | None) -> str | None:
+        """Map an AI-generated exercise name to a registry key.
+
+        Strips equipment prefixes (dumbbell_, barbell_, cable_, etc.) and
+        checks for substring matches against known exercises.
+        """
+        if not hint:
+            return None
+        known = self._registry.list_exercises()
+        # Exact match first
+        if hint in known:
+            return hint
+        # Strip common equipment/modifier prefixes and try again
+        _PREFIXES = ("dumbbell_", "barbell_", "cable_", "machine_", "db_", "bb_",
+                     "standing_", "seated_", "incline_", "decline_", "wide_grip_", "close_grip_")
+        normalized = hint
+        for prefix in _PREFIXES:
+            if normalized.startswith(prefix):
+                normalized = normalized[len(prefix):]
+        if normalized in known:
+            return normalized
+        # Substring match: return first known exercise whose name appears in the hint
+        for ex in known:
+            if ex in hint:
+                return ex
+        log.warning("exercise_hint_unresolved", hint=hint, known=known)
+        return None
+
     async def _process(
         self, redis: aioredis.Redis, msg_id: str, msg_data: dict
     ) -> None:
         event = PerceptionEvent.model_validate_json(msg_data.get("data", "{}"))
         track_id = event.track_id
 
+        # Check for a coach-set active exercise hint (overrides classifier)
+        hint_key = f"active_exercise:{self._camera_id}"
+        hint = await redis.get(hint_key)
+        hint_exercise: str | None = self._resolve_exercise_hint(hint.decode() if hint else None)
+
+        # If no active session (user hasn't tapped Start), skip processing entirely
+        session_track_raw = await redis.get(f"active_session_track:{self._camera_id}")
+        session_track_uuid: str | None = session_track_raw.decode() if session_track_raw else None
+
+        if not session_track_uuid:
+            await ack(redis, self._in_stream, GROUP_EXERCISE, msg_id)
+            return
+
         # Classify exercise from rolling keypoint history
         exercise_name, confidence = self._classifier.update(track_id, event.keypoints)
 
-        if exercise_name == "unknown" or confidence < 0.5:
+        # If coach pinned an exercise, trust it even on low confidence
+        if hint_exercise and hint_exercise in self._registry._exercises:
+            exercise_name = hint_exercise
+            confidence = 1.0
+        elif exercise_name == "unknown" or confidence < 0.5:
             await ack(redis, self._in_stream, GROUP_EXERCISE, msg_id)
             return
 
         self._track_exercise[track_id] = exercise_name
+
+        # Heartbeat: let the API know this track is actively visible
+        await redis.set(f"track_seen:{session_track_uuid}", "1", ex=10)
+
         rep_counter = self._rep_counters[exercise_name]
         form_analyzer = self._form_analyzers[exercise_name]
         exercise_def = self._registry.get_exercise(exercise_name)
@@ -163,6 +212,7 @@ class ExercisePipeline:
             rep_event = RepCountedEvent(
                 camera_id=self._camera_id,
                 track_id=rep_event.track_id,
+                routing_id=session_track_uuid,
                 exercise_set_id=set_id,
                 exercise_type=rep_event.exercise_type,
                 rep_number=rep_event.rep_number,
@@ -195,6 +245,7 @@ class ExercisePipeline:
             filled_alert = FormAlertEvent(
                 camera_id=self._camera_id,
                 track_id=alert.track_id,
+                routing_id=session_track_uuid,
                 exercise_set_id=set_id,
                 exercise_type=alert.exercise_type,
                 rep_count=alert.rep_count,
@@ -334,10 +385,15 @@ class ExercisePipeline:
             )
             await db.commit()
 
+        # Resolve user UUID for WS routing
+        session_track_raw = await self._redis.get(f"active_session_track:{self._camera_id}") if self._redis else None
+        routing_id = session_track_raw.decode() if session_track_raw else None
+
         # Publish set_complete event
         event = SetCompleteEvent(
             camera_id=self._camera_id,
             track_id=track_id,
+            routing_id=routing_id,
             exercise_set_id=set_id,
             exercise_type=exercise_name,
             rep_count=rep_count,

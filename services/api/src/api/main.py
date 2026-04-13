@@ -11,7 +11,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from gym_shared.logging import configure_logging, get_logger
 from gym_shared.settings import settings
 
-from api.routers import conversations, persons, sessions, tracks
+from api.routers import chat, conversations, persons, sessions, tracks
+from api.routers.tracks import cameras_router
 from api.routers import websocket as ws_router
 from api.websocket_manager import WebSocketManager
 
@@ -60,8 +61,10 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    app.include_router(chat.router)
     app.include_router(sessions.router)
     app.include_router(tracks.router)
+    app.include_router(cameras_router)
     app.include_router(ws_router.router)
     app.include_router(conversations.router)
     app.include_router(persons.router)

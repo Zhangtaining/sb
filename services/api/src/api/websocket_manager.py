@@ -32,40 +32,52 @@ class WebSocketManager:
     """
 
     def __init__(self) -> None:
-        # track_id (str) → WebSocket
-        self._connections: dict[str, WebSocket] = {}
+        # track_id (str) → set of WebSockets (multiple tabs can connect)
+        self._connections: dict[str, set[WebSocket]] = {}
         self._lock = asyncio.Lock()
 
     async def connect(self, track_id: str, ws: WebSocket) -> None:
         await ws.accept()
         async with self._lock:
-            self._connections[track_id] = ws
-        log.info("ws_connected", track_id=track_id)
+            if track_id not in self._connections:
+                self._connections[track_id] = set()
+            self._connections[track_id].add(ws)
+        log.info("ws_connected", track_id=track_id, total=len(self._connections[track_id]))
 
-    async def disconnect(self, track_id: str) -> None:
+    async def disconnect(self, track_id: str, ws: WebSocket | None = None) -> None:
         async with self._lock:
-            self._connections.pop(track_id, None)
+            if track_id in self._connections:
+                if ws is not None:
+                    self._connections[track_id].discard(ws)
+                if not self._connections[track_id]:
+                    del self._connections[track_id]
         log.info("ws_disconnected", track_id=track_id)
 
     async def send(self, track_id: str, message: dict) -> None:
         async with self._lock:
-            ws = self._connections.get(track_id)
-        if ws is None:
+            sockets = list(self._connections.get(track_id, set()))
+        if not sockets:
+            log.warning("ws_send_no_client", track_id=track_id, event_type=message.get("type"))
             return
-        try:
-            await ws.send_text(json.dumps(message))
-        except Exception as exc:
-            log.warning("ws_send_error", track_id=track_id, error=str(exc))
-            await self.disconnect(track_id)
+        text = json.dumps(message)
+        for ws in sockets:
+            try:
+                await ws.send_text(text)
+                log.info("ws_sent", track_id=track_id, event_type=message.get("type"))
+            except Exception as exc:
+                log.warning("ws_send_error", track_id=track_id, error=str(exc))
+                await self.disconnect(track_id, ws)
 
     async def broadcast_to_all(self, message: dict) -> None:
         async with self._lock:
-            targets = list(self._connections.items())
-        for track_id, ws in targets:
-            try:
-                await ws.send_text(json.dumps(message))
-            except Exception:
-                await self.disconnect(track_id)
+            targets = [(tid, list(sockets)) for tid, sockets in self._connections.items()]
+        text = json.dumps(message)
+        for track_id, sockets in targets:
+            for ws in sockets:
+                try:
+                    await ws.send_text(text)
+                except Exception:
+                    await self.disconnect(track_id, ws)
 
     # ── Background Redis reader ────────────────────────────────────────────────
 
@@ -88,8 +100,11 @@ class WebSocketManager:
             return last_id, []
 
     def _extract_track_id(self, stream: str, data: dict) -> str | None:
-        """Pull track_id out of a stream message payload."""
-        # All our event schemas carry 'data' field as JSON string
+        """Pull routing ID out of a stream message payload.
+
+        Prefers routing_id (session UUID set when user taps Start) over
+        the raw integer track_id from YOLO.
+        """
         raw = data.get(b"data") or data.get("data")
         if not raw:
             return None
@@ -97,8 +112,11 @@ class WebSocketManager:
             payload = json.loads(raw if isinstance(raw, str) else raw.decode())
         except Exception:
             return None
-        # RepCountedEvent / FormAlertEvent carry track_id; GuidanceMessage carries track_id
-        return str(payload.get("track_id")) if payload.get("track_id") is not None else None
+        routing_id = payload.get("routing_id")
+        if routing_id:
+            return str(routing_id)
+        track_id = payload.get("track_id")
+        return str(track_id) if track_id is not None else None
 
     async def run_reader(self, redis: aioredis.Redis) -> None:
         """Long-running task: reads all streams and routes messages to WS clients."""

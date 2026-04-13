@@ -2,7 +2,7 @@
  * API client — wraps all HTTP and WebSocket calls to the gym API gateway.
  */
 
-const API_BASE_URL = 'http://localhost:8000'; // Override with your server IP in production
+const API_BASE_URL = 'http://192.168.1.151:8000'; // Mac's LAN IP — phone must be on same WiFi
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -69,6 +69,15 @@ export interface PersonProfile {
   member_since: string;
 }
 
+export interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+export interface StatelessChatReply {
+  response: string;
+}
+
 export type WsEventType = 'rep_counted' | 'form_alert' | 'guidance' | 'onboarding' | 'onboarding_plan';
 
 export interface WsMessage {
@@ -126,6 +135,28 @@ export const api = {
 
   getMessages: (conversationId: string) =>
     apiFetch<MessageResponse[]>(`/conversations/${conversationId}/messages`, ''),
+
+  // ── Phase 1: Stateless anonymous chat ────────────────────────────────────
+  chat: (message: string, history: ChatMessage[], trackId?: string) =>
+    apiPost<StatelessChatReply>('/chat', {message, history, track_id: trackId ?? null}),
+
+  exerciseIntro: (exerciseName: string) =>
+    apiPost<{intro: string}>('/chat/exercise-intro', {exercise_name: exerciseName}),
+
+  setActiveExercise: (trackId: string, exerciseName: string, cameraId = 'cam-01') =>
+    apiPost<{active_exercise: string}>(`/tracks/${trackId}/active-exercise`, {
+      exercise_name: exerciseName,
+      camera_id: cameraId,
+    }),
+
+  clearActiveExercise: (trackId: string, cameraId = 'cam-01') =>
+    fetch(`${API_BASE_URL}/tracks/${trackId}/active-exercise?camera_id=${cameraId}`, {
+      method: 'DELETE',
+    }),
+
+  getCameraStatus: (cameraId = 'cam-01') =>
+    fetch(`${API_BASE_URL}/cameras/${cameraId}/status`)
+      .then(r => r.json() as Promise<{camera_id: string; camera_online: boolean; person_detected: boolean}>),
 };
 
 // ── WebSocket ─────────────────────────────────────────────────────────────────

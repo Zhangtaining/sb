@@ -78,7 +78,6 @@ export function useLiveStream(trackId: string | null) {
               avgFormScore: msg.data.avg_form_score as number,
               durationMs: msg.data.duration_ms as number,
             },
-            repCount: 0, // reset for next set
           }));
         } else if (msg.type === 'rest_update') {
           const finished = msg.data.finished as boolean;

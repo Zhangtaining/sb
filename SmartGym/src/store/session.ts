@@ -11,6 +11,7 @@ const KEY_CONVERSATION_ID = '@smartgym/conversation_id';
 let _trackId: string | null = null;
 let _personId: string | null = null;
 let _conversationId: string | null = null;
+let _exerciseTarget: string | null = null; // e.g. "10-15"
 
 export const session = {
   async load(): Promise<string | null> {
@@ -56,5 +57,13 @@ export const session = {
 
   getConversationId(): string | null {
     return _conversationId;
+  },
+
+  setExerciseTarget(reps: string): void {
+    _exerciseTarget = reps;
+  },
+
+  getExerciseTarget(): string | null {
+    return _exerciseTarget;
   },
 };

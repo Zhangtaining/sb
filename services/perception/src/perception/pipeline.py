@@ -123,6 +123,10 @@ class PerceptionPipeline:
             None, self._detector.track, frame
         )
 
+        # Heartbeat: mark camera as having a person present (TTL 10s)
+        if tracked:
+            await redis.set(f"camera_has_person:{self._camera_id}", "1", ex=10)
+
         # Publish one event per tracked person
         for td in tracked:
             # Extract ReID embedding from person crop

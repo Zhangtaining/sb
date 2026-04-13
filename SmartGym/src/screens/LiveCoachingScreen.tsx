@@ -5,9 +5,42 @@
 import React, {useEffect, useRef, useState} from 'react';
 import {FlatList, StyleSheet, Text, TouchableOpacity, View} from 'react-native';
 import Tts from 'react-native-tts';
+import {useNavigation} from '@react-navigation/native';
 import {useLiveStream, SetSummary} from '../hooks/useLiveStream';
+import {api} from '../api/client';
 import {session} from '../store/session';
 import {OnboardingScreen} from './OnboardingScreen';
+
+function parseTargetReps(reps: string | null): number | null {
+  if (!reps) {return null;}
+  const parts = reps.split('-');
+  const val = parseInt(parts[parts.length - 1], 10);
+  return isNaN(val) ? null : val;
+}
+
+const REP_WORDS = [
+  '', 'One', 'Two', 'Three', 'Four', 'Five',
+  'Six', 'Seven', 'Eight', 'Nine', 'Ten',
+  'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen',
+  'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen', 'Twenty',
+];
+
+function repWord(n: number): string {
+  return REP_WORDS[n] ?? String(n);
+}
+
+function repCallout(rep: number, target: number | null): string {
+  if (target && rep === target) {
+    return `${repWord(rep)}! That's your set, well done!`;
+  }
+  if (target && rep === Math.floor(target / 2)) {
+    return `${repWord(rep)}! Halfway there, keep it up!`;
+  }
+  if (rep % 5 === 0) {
+    return `${repWord(rep)}! Great work!`;
+  }
+  return repWord(rep);
+}
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -36,38 +69,34 @@ function fmtRest(s: number): string {
 
 function SetCompleteCard({
   summary,
-  onDismiss,
+  onNext,
 }: {
   summary: SetSummary;
-  onDismiss: () => void;
+  onNext: () => void;
 }) {
-  useEffect(() => {
-    const t = setTimeout(onDismiss, 8000);
-    return () => clearTimeout(t);
-  }, [onDismiss]);
-
   return (
-    <TouchableOpacity style={styles.setCard} onPress={onDismiss} activeOpacity={0.9}>
-      <Text style={styles.setCardTitle}>Set Complete</Text>
-      <Text style={styles.setCardExercise}>{summary.exerciseType}</Text>
+    <View style={styles.setCard}>
+      <Text style={styles.setCardTitle}>✓ Set Complete</Text>
+      <Text style={styles.setCardExercise}>{summary.exerciseType.replace(/_/g, ' ')}</Text>
       <View style={styles.setCardRow}>
         <View style={styles.setCardStat}>
           <Text style={styles.setCardStatValue}>{summary.repCount}</Text>
           <Text style={styles.setCardStatLabel}>REPS</Text>
         </View>
-        <View
-          style={[styles.setCardBadge, {backgroundColor: formBadgeColor(summary.avgFormScore)}]}>
+        <View style={[styles.setCardBadge, {backgroundColor: formBadgeColor(summary.avgFormScore)}]}>
           <Text style={styles.setCardBadgeText}>{formLabel(summary.avgFormScore)}</Text>
         </View>
-        {summary.durationMs > 0 ? (
+        {summary.durationMs > 0 && (
           <View style={styles.setCardStat}>
             <Text style={styles.setCardStatValue}>{fmtDuration(summary.durationMs)}</Text>
             <Text style={styles.setCardStatLabel}>DURATION</Text>
           </View>
-        ) : null}
+        )}
       </View>
-      <Text style={styles.setCardDismiss}>Tap to dismiss</Text>
-    </TouchableOpacity>
+      <TouchableOpacity style={styles.nextBtn} onPress={onNext} activeOpacity={0.8}>
+        <Text style={styles.nextBtnText}>Next Exercise →</Text>
+      </TouchableOpacity>
+    </View>
   );
 }
 
@@ -75,6 +104,7 @@ function SetCompleteCard({
 
 export function LiveCoachingScreen() {
   const trackId = session.get();
+  const navigation = useNavigation<any>();
   const {
     connected,
     repCount,
@@ -88,16 +118,17 @@ export function LiveCoachingScreen() {
 
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [workoutPlan, setWorkoutPlan] = useState<object | null>(null);
-  const [showSetCard, setShowSetCard] = useState(false);
-  const [displayedSummary, setDisplayedSummary] = useState<SetSummary | null>(null);
+  const [completedSummary, setCompletedSummary] = useState<SetSummary | null>(null);
+  const [frozenRepCount, setFrozenRepCount] = useState<number | null>(null);
 
   // Live rest timer (count-up on the client side)
   const [localRestS, setLocalRestS] = useState<number | null>(null);
   const restIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Log of received guidance messages (newest first)
-  const guidanceLog = useRef<string[]>([]);
-  const [log, setLog] = React.useState<string[]>([]);
+  // Unified coaching log — guidance + form alerts (newest first)
+  interface LogEntry { text: string; type: 'guidance' | 'alert'; }
+  const coachingLog = useRef<LogEntry[]>([]);
+  const [log, setLog] = React.useState<LogEntry[]>([]);
 
   useEffect(() => {
     Tts.setDefaultLanguage('en-US');
@@ -114,15 +145,31 @@ export function LiveCoachingScreen() {
   useEffect(() => {
     if (!lastGuidance) {return;}
     Tts.speak(lastGuidance);
-    guidanceLog.current = [lastGuidance, ...guidanceLog.current.slice(0, 19)];
-    setLog([...guidanceLog.current]);
+    coachingLog.current = [{text: lastGuidance, type: 'guidance'}, ...coachingLog.current.slice(0, 29)];
+    setLog([...coachingLog.current]);
   }, [lastGuidance]);
 
-  // Show set completion card when a new summary arrives
+  // Speak rep number aloud on every new rep
+  useEffect(() => {
+    if (repCount <= 0) {return;}
+    const target = parseTargetReps(session.getExerciseTarget());
+    Tts.speak(repCallout(repCount, target));
+  }, [repCount]);
+
+  // Speak form alerts and add to log
+  useEffect(() => {
+    if (!lastAlert) {return;}
+    Tts.speak(lastAlert);
+    coachingLog.current = [{text: lastAlert, type: 'alert'}, ...coachingLog.current.slice(0, 29)];
+    setLog([...coachingLog.current]);
+  }, [lastAlert]);
+
+  // Freeze count and show completion card when set ends
   useEffect(() => {
     if (!lastSetSummary) {return;}
-    setDisplayedSummary(lastSetSummary);
-    setShowSetCard(true);
+    setFrozenRepCount(lastSetSummary.repCount);
+    setCompletedSummary(lastSetSummary);
+    Tts.speak(`Set complete! ${lastSetSummary.repCount} reps. Great work! Rest up, then tap Next Exercise when you're ready.`);
   }, [lastSetSummary]);
 
   // Start local rest count-up when server restS arrives
@@ -168,6 +215,18 @@ export function LiveCoachingScreen() {
         <Text style={styles.statusText}>{connected ? 'Live' : 'Connecting…'}</Text>
       </View>
 
+      {/* Tracking state banner */}
+      {connected && (
+        <View style={[styles.trackingBanner, exerciseType ? styles.trackingBannerActive : styles.trackingBannerWaiting]}>
+          <Text style={styles.trackingDot}>{exerciseType ? '●' : '○'}</Text>
+          <Text style={styles.trackingText}>
+            {exerciseType
+              ? `Tracking: ${exerciseType.replace(/_/g, ' ')}`
+              : 'Waiting for movement…'}
+          </Text>
+        </View>
+      )}
+
       {/* Exercise + rep counter OR rest timer */}
       <View style={styles.statsCard}>
         {localRestS !== null ? (
@@ -178,40 +237,51 @@ export function LiveCoachingScreen() {
         ) : (
           <>
             <Text style={styles.exerciseLabel}>{exerciseType ?? '—'}</Text>
-            <Text style={styles.repCount}>{repCount}</Text>
-            <Text style={styles.repLabel}>REPS</Text>
+            <View style={styles.repRow}>
+              <Text style={[styles.repCount, completedSummary ? styles.repCountDone : null]}>
+                {frozenRepCount ?? repCount}
+              </Text>
+              {parseTargetReps(session.getExerciseTarget()) !== null && (
+                <Text style={styles.repTarget}>/{parseTargetReps(session.getExerciseTarget())}</Text>
+              )}
+            </View>
+            <Text style={styles.repLabel}>{completedSummary ? 'SET DONE' : 'REPS'}</Text>
           </>
         )}
       </View>
 
       {/* Set completion card */}
-      {showSetCard && displayedSummary ? (
+      {completedSummary ? (
         <SetCompleteCard
-          summary={displayedSummary}
-          onDismiss={() => setShowSetCard(false)}
+          summary={completedSummary}
+          onNext={() => {
+            const tid = session.get();
+            if (tid) {api.clearActiveExercise(tid).catch(() => {});}
+            setCompletedSummary(null);
+            setFrozenRepCount(null);
+            navigation.navigate('Today');
+          }}
         />
       ) : null}
 
       {/* Workout plan checklist */}
-      {workoutPlan && !showSetCard ? (
-        <WorkoutChecklist plan={workoutPlan} completedSummary={displayedSummary} />
+      {workoutPlan && !completedSummary ? (
+        <WorkoutChecklist plan={workoutPlan} completedSummary={null} />
       ) : null}
 
-      {/* Current form alert */}
-      {lastAlert ? (
-        <View style={styles.alertBanner}>
-          <Text style={styles.alertText}>⚠ {lastAlert}</Text>
-        </View>
-      ) : null}
-
-      {/* Guidance log */}
+      {/* Unified coaching log */}
       <Text style={styles.sectionTitle}>Coaching Log</Text>
       <FlatList
         data={log}
         keyExtractor={(_, i) => String(i)}
         renderItem={({item}) => (
-          <View style={styles.logItem}>
-            <Text style={styles.logText}>{item}</Text>
+          <View style={item.type === 'alert' ? styles.logItemAlert : styles.logItem}>
+            {item.type === 'alert' && (
+              <Text style={styles.logAlertLabel}>⚠ Form</Text>
+            )}
+            <Text style={item.type === 'alert' ? styles.logTextAlert : styles.logText}>
+              {item.text}
+            </Text>
           </View>
         )}
         ListEmptyComponent={
@@ -266,6 +336,17 @@ const styles = StyleSheet.create({
   container: {flex: 1, backgroundColor: '#111'},
   statusBar: {paddingVertical: 6, alignItems: 'center'},
   statusText: {color: '#fff', fontWeight: '700', fontSize: 13},
+  trackingBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    gap: 8,
+  },
+  trackingBannerActive: {backgroundColor: '#0d2b0d'},
+  trackingBannerWaiting: {backgroundColor: '#1c1c1e'},
+  trackingDot: {fontSize: 10, color: '#4CAF50'},
+  trackingText: {fontSize: 13, fontWeight: '600', color: '#4CAF50', textTransform: 'capitalize'},
   statsCard: {
     alignItems: 'center',
     paddingVertical: 32,
@@ -274,7 +355,10 @@ const styles = StyleSheet.create({
     borderRadius: 16,
   },
   exerciseLabel: {color: '#aaa', fontSize: 16, marginBottom: 4, textTransform: 'capitalize'},
+  repRow: {flexDirection: 'row', alignItems: 'flex-end'},
   repCount: {color: '#fff', fontSize: 72, fontWeight: '900', lineHeight: 80},
+  repCountDone: {color: '#4CAF50'},
+  repTarget: {color: '#555', fontSize: 36, fontWeight: '700', lineHeight: 80, marginBottom: 4},
   repLabel: {color: '#888', fontSize: 14, letterSpacing: 4},
   restLabel: {color: '#4CAF50', fontSize: 18, letterSpacing: 3, fontWeight: '700'},
   restTimer: {color: '#fff', fontSize: 64, fontWeight: '900', lineHeight: 72, fontVariant: ['tabular-nums']},
@@ -296,7 +380,14 @@ const styles = StyleSheet.create({
   setCardStatLabel: {color: '#888', fontSize: 10, letterSpacing: 2},
   setCardBadge: {borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6},
   setCardBadgeText: {color: '#fff', fontWeight: '700', fontSize: 13},
-  setCardDismiss: {color: '#555', fontSize: 11, marginTop: 8},
+  nextBtn: {
+    marginTop: 14,
+    backgroundColor: '#4CAF50',
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  nextBtnText: {color: '#fff', fontWeight: '700', fontSize: 15},
   // Workout checklist
   checklist: {
     marginHorizontal: 16,
@@ -310,23 +401,24 @@ const styles = StyleSheet.create({
   checkmark: {color: '#555', fontSize: 16, marginRight: 8, width: 20},
   checkmarkDone: {color: '#4CAF50'},
   checklistText: {color: '#fff', fontSize: 14},
-  // Alerts and log
-  alertBanner: {
-    backgroundColor: '#b71c1c',
-    marginHorizontal: 16,
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 8,
-  },
-  alertText: {color: '#fff', fontSize: 14},
   sectionTitle: {color: '#aaa', fontSize: 13, letterSpacing: 2, marginLeft: 16, marginBottom: 4},
   logList: {flex: 1, marginHorizontal: 16},
   logItem: {
     backgroundColor: '#1c1c1e',
-    borderRadius: 8,
+    borderRadius: 10,
     padding: 12,
     marginBottom: 8,
   },
-  logText: {color: '#fff', fontSize: 15},
+  logItemAlert: {
+    backgroundColor: '#1c1c1e',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: '#FF9800',
+  },
+  logAlertLabel: {color: '#FF9800', fontSize: 10, fontWeight: '700', letterSpacing: 1, marginBottom: 3},
+  logText: {color: '#fff', fontSize: 15, lineHeight: 21},
+  logTextAlert: {color: '#ddd', fontSize: 14, lineHeight: 20},
   emptyText: {color: '#555', textAlign: 'center', marginTop: 32},
 });

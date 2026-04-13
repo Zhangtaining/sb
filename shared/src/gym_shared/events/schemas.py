@@ -83,6 +83,7 @@ class RepCountedEvent(_FrozenModel):
 
     camera_id: str
     track_id: int
+    routing_id: str | None = Field(default=None, description="Session UUID for WebSocket routing; overrides track_id when set")
     exercise_set_id: str = Field(description="UUID of the current ExerciseSet")
     exercise_type: str
     rep_number: int = Field(description="1-based rep index within the current set")
@@ -100,6 +101,7 @@ class FormAlertEvent(_FrozenModel):
 
     camera_id: str
     track_id: int
+    routing_id: str | None = Field(default=None, description="Session UUID for WebSocket routing; overrides track_id when set")
     exercise_set_id: str
     exercise_type: str
     rep_count: int
@@ -123,6 +125,7 @@ class SetCompleteEvent(_FrozenModel):
 
     camera_id: str
     track_id: int
+    routing_id: str | None = Field(default=None, description="Session UUID for WebSocket routing; overrides track_id when set")
     exercise_set_id: str
     exercise_type: str
     rep_count: int
